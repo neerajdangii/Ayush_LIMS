@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Report, ReportRemark, ReportTemplate
+from .models import Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
 
 
 @admin.register(ReportRemark)
@@ -22,3 +22,10 @@ class ReportTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "sample_name", "protocol", "is_active", "created_at")
     list_filter = ("is_active", "protocol")
     search_fields = ("name", "description", "content")
+
+
+@admin.register(TDSDocumentTemplate)
+class TDSDocumentTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "document_type", "test", "is_active", "updated_at")
+    list_filter = ("document_type", "is_active", "test")
+    search_fields = ("name", "description", "content", "test__name")

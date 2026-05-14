@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, models
 from django.db.models import Max
 from django.db.models.functions import Cast
@@ -33,7 +34,38 @@ class ManufacturerMaster(ActiveMasterModel):
 
 
 class SampleNameMaster(ActiveMasterModel):
-    pass
+    class Discipline(models.TextChoices):
+        NABL = "NABL", "NABL"
+        PHARMA = "Pharma", "Pharma"
+
+    class TestGroup(models.TextChoices):
+        BIOLOGICAL = "Biological Section", "Biological Section"
+        CHEMICAL_INSTRUMENT = "Chemical/Instrument Section", "Chemical/Instrument Section"
+
+    class SampleType(models.TextChoices):
+        API = "API", "API"
+        FG = "FG", "FG"
+        FOOD = "Food", "Food"
+        RM = "RM", "RM"
+
+    generic_name = models.CharField(max_length=255, blank=True)
+    discipline = models.CharField(max_length=40, choices=Discipline.choices, blank=True)
+    test_group = models.CharField(max_length=80, choices=TestGroup.choices, blank=True)
+    sample_type = models.CharField(max_length=20, choices=SampleType.choices, blank=True)
+    method = models.CharField(max_length=255, blank=True)
+    rate = models.CharField(max_length=100, blank=True)
+    observationsheet_prefix = models.CharField(max_length=100, blank=True)
+    customer = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    limits = models.TextField(blank=True)
+
+    @property
+    def display_name(self) -> str:
+        generic = (self.generic_name or "").strip()
+        return f"{self.name} ({generic})" if generic else self.name
+
+    def __str__(self) -> str:
+        return self.display_name
 
 
 class TestMaster(ActiveMasterModel):
@@ -215,6 +247,18 @@ class Booking(models.Model):
         if not actor:
             return "-"
         return actor.get_full_name() or actor.username
+
+    @property
+    def report_object(self):
+        try:
+            return self.report
+        except ObjectDoesNotExist:
+            return None
+
+    @property
+    def is_reported(self) -> bool:
+        report = self.report_object
+        return bool(report and report.status != "draft")
 
     def __str__(self) -> str:
         return self.sample_reg_no or self.tracking_code or f"Booking-{self.pk}"

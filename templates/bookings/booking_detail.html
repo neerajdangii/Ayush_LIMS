@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% load report_extras %}
+{% block title %}Booking {{ booking.tracking_code }} | LIMS{% endblock %}
+{% block content %}
+<div class="booking-view-layout">
+  <aside class="booking-view-sidebar">
+    <h6>Actions</h6>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      {% if user|has_any_role:"Staff,Manager,Analyst,Admin" %}
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'bookings:edit' booking.pk %}">Edit Booking</a>
+      {% endif %}
+      {% if perms.bookings.delete_booking %}
+      <a class="btn btn-sm btn-outline-danger" href="{% url 'bookings:delete' booking.pk %}">Delete Booking</a>
+      {% endif %}
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'bookings:list' %}">List Bookings</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'bookings:create' %}?duplicate={{ booking.pk }}">New Booking</a>
+    </div>
+
+    <dl class="booking-view-audit">
+      <dt>Created By</dt>
+      <dd>
+        {% if booking.created_by %}
+          {% with full_name=booking.created_by.get_full_name %}
+            {{ full_name|default:booking.created_by.username }}
+          {% endwith %}
+        {% else %}
+          N.A
+        {% endif %}
+        <br>{{ booking.created_at|date:"d-M-y" }}
+      </dd>
+      <dt>Modified By</dt>
+      <dd>{{ booking.updated_by_display }}<br>{{ booking.updated_at|date:"d-M-y" }}</dd>
+      <dt>Assign By</dt>
+      <dd>
+        {% if booking.approved_by %}
+          {% with full_name=booking.approved_by.get_full_name %}
+            {{ full_name|default:booking.approved_by.username }}
+          {% endwith %}
+        {% else %}
+          N.A
+        {% endif %}
+        <br>{{ booking.approved_at|date:"d-M-y"|default:"" }}
+      </dd>
+      <dt>Reported By</dt>
+      <dd>{{ report.updated_by_display|default:"N.A" }}</dd>
+      <dt>Review By</dt>
+      <dd>{{ report.manager_name|default:"N.A" }}</dd>
+      <dt>Verify By</dt>
+      <dd>{{ report.incharge_name|default:"N.A" }}</dd>
+    </dl>
+
+    <a class="btn btn-sm btn-outline-primary mt-2" href="{% url 'bookings:list' %}">Back to Booking</a>
+    {% if user|has_any_role:"Admin,Manager,Analyst" %}
+    <a class="btn btn-sm btn-outline-secondary mt-2" href="{% url 'reports:tds_template_list' %}">TDS Master</a>
+    {% endif %}
+  </aside>
+
+  <section class="booking-view-main">
+    <div class="card shadow-sm booking-view-card">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+          <div>
+            <h5 class="mb-1">#{{ booking.tracking_code }} ~ {{ booking.sample_name.display_name|default:"N.A" }} ~ {{ booking.sample_reg_no|default:"N.A" }}</h5>
+            {% if booking.is_reported %}
+            <span class="badge text-bg-primary" id="bookingStatusBadge">Reported</span>
+            {% elif booking.status == 'approved' %}
+            <span class="badge text-bg-success" id="bookingStatusBadge">Assigned</span>
+            {% else %}
+            <span class="badge text-bg-warning" id="bookingStatusBadge">Sample Received</span>
+            {% endif %}
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-sm tds-doc-btn tds-doc-btn--cs" href="{% url 'reports:booking_tds_document' booking.pk 'cs' %}?print=1" target="_blank" rel="noopener">CS</a>
+            <a class="btn btn-sm tds-doc-btn tds-doc-btn--ads" href="{% url 'reports:booking_tds_document' booking.pk 'ads' %}?print=1" target="_blank" rel="noopener">ADS</a>
+            <a class="btn btn-sm tds-doc-btn tds-doc-btn--ac" href="{% url 'reports:booking_tds_document' booking.pk 'ac' %}?print=1" target="_blank" rel="noopener">AC</a>
+            <a class="btn btn-sm tds-doc-btn tds-doc-btn--checklist" href="{% url 'reports:booking_tds_document' booking.pk 'checklist' %}?print=1" target="_blank" rel="noopener">Checklist</a>
+            <a class="btn btn-sm tds-doc-btn tds-doc-btn--trf" href="{% url 'reports:booking_tds_document' booking.pk 'trf' %}?print=1" target="_blank" rel="noopener">TRF</a>
+            <a class="btn btn-sm tds-doc-btn tds-doc-btn--job" href="{% url 'reports:booking_tds_document' booking.pk 'job_order' %}?print=1" target="_blank" rel="noopener">Print Job Order</a>
+            {% if booking.status == 'approved' %}
+              {% if user|has_role:"Checked By" %}
+              <a class="btn btn-sm btn-primary" href="{% url 'reports:approval' booking.pk %}">Report</a>
+              {% endif %}
+              {% if report %}
+                {% if user|has_any_role:"Manager,Incharge,Analyst,Admin" %}
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'reports:coa_edit' report.pk %}">Make Report</a>
+                <a class="btn btn-sm btn-outline-dark" href="{% url 'reports:coa_print' report.pk %}">View Report</a>
+                {% endif %}
+              {% endif %}
+            {% else %}
+              {% if user|has_role:"Checked By" %}
+              <form method="post" action="{% url 'bookings:approve' booking.pk %}" class="d-inline" id="bookingAssignForm">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-success" type="submit">Assign</button>
+              </form>
+              <a class="btn btn-sm btn-primary d-none" id="bookingReportLink" href="{% url 'reports:approval' booking.pk %}">Report</a>
+              {% endif %}
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="booking-info-table">
+          <div class="booking-info-row">
+            <div>Sample Type / Generic Name</div>
+            <div>{{ booking.sample_type|default:"N.A" }} / {{ booking.sample_name.display_name|default:"N.A" }}</div>
+          </div>
+          <div class="booking-info-row">
+            <div>Quantity</div>
+            <div>{{ booking.sample_qty|default:"N.A" }}{% if booking.uom %} {{ booking.uom.name }}{% endif %}</div>
+          </div>
+          <div class="booking-info-row">
+            <div>Sampling Date</div>
+            <div>{{ booking.sampling_upto|date:"d-M-Y"|default:"N.A" }}</div>
+          </div>
+          <div class="booking-info-row">
+            <div>Sample Receipt Date</div>
+            <div>{{ booking.sample_receipt_date|date:"d-M-Y"|default:"N.A" }}</div>
+          </div>
+          <div class="booking-info-row booking-info-row--band">
+            <div>Sample Reg.No.<br>ULR No.</div>
+            <div>{{ booking.sample_reg_no|default:"N.A" }}<br>N.A</div>
+          </div>
+          <div class="booking-info-row">
+            <div>Discipline<br>Testgroup<br>Testtype</div>
+            <div>
+              {% if booking.sample_name.discipline or booking.sample_name.test_group %}
+                {{ booking.sample_name.discipline|default:"N.A" }}
+                {% if booking.sample_name.test_group %} - {{ booking.sample_name.test_group }} - {{ booking.sample_name.test_group }}{% endif %}
+              {% else %}
+                {{ booking.protocol.name|default:"N.A" }}
+              {% endif %}
+            </div>
+          </div>
+          <div class="booking-info-row booking-info-row--band">
+            <div>Customer</div>
+            <div>
+              <strong>{{ booking.customer.name|default:"N.A" }}</strong><br>
+              {{ booking.customer.address|default:"" }}
+            </div>
+          </div>
+          <div class="booking-info-row booking-info-row--highlight">
+            <div>Submitter<br>Manufacturer<br>Collected By</div>
+            <div>{{ booking.submitter.name|default:"N.S." }}<br>{{ booking.manufacturer.name|default:"N.A" }}<br>{{ booking.collected_by_name|default:"N.A" }}</div>
+          </div>
+          <div class="booking-info-row booking-info-row--band">
+            <div>Sample Location<br>Sample Condition<br>Packaging Mode<br>Sample Procedure</div>
+            <div>{{ booking.sample_location|default:"N.A" }}<br>{{ booking.sample_condition|default:"N.A" }}<br>{{ booking.packaging_mode|default:"N.A" }}<br>{{ booking.sampling_procedure|default:"N.A" }}</div>
+          </div>
+          <div class="booking-info-row">
+            <div>Customer Reference Date / Number</div>
+            <div>{{ booking.letter_date|date:"d-M-Y"|default:"N.A" }}{% if booking.customer_sr_no %} / {{ booking.customer_sr_no }}{% endif %}</div>
+          </div>
+          <div class="booking-info-row booking-info-row--band">
+            <div>Tentative Date</div>
+            <div>{{ booking.analysis_end_date|date:"d-M-y"|default:"N.A" }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-body table-responsive">
+        <table class="table table-bordered align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Test/Equipment</th>
+              <th>Result</th>
+              <th>Perform By</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for test in booking.test_to_be_performed.all %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ test.name }}</td>
+              <td>-</td>
+              <td>-</td>
+              <td><span class="badge text-bg-secondary">Pending</span></td>
+              <td>
+                {% if booking.status == 'approved' %}
+                  {% if user|has_role:"Checked By" %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'reports:approval' booking.pk %}">Report</a>
+                  {% else %}
+                  -
+                  {% endif %}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center">No tests selected.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const assignForm = document.getElementById('bookingAssignForm');
+    const reportLink = document.getElementById('bookingReportLink');
+    const statusBadge = document.getElementById('bookingStatusBadge');
+
+    if (!assignForm || !reportLink) {
+      return;
+    }
+
+    assignForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const submitButton = assignForm.querySelector('button[type="submit"]');
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Assigning...';
+      }
+
+      const response = await fetch(assignForm.action, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': assignForm.querySelector('[name=csrfmiddlewaretoken]').value,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+
+      if (!response.ok) {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Assign';
+        }
+        return;
+      }
+
+      const data = await response.json();
+      if (data.report_url) {
+        reportLink.href = data.report_url;
+      }
+      assignForm.classList.add('d-none');
+      reportLink.classList.remove('d-none');
+      if (statusBadge) {
+        statusBadge.classList.remove('text-bg-warning');
+        statusBadge.classList.add('text-bg-success');
+        statusBadge.textContent = 'Assigned';
+      }
+    });
+  });
+</script>
+{% endblock %}

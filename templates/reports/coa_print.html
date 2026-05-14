@@ -125,13 +125,6 @@
       params.delete('autoprint');
       const cleanSearch = params.toString();
       const cleanUrl = `${url.pathname}${cleanSearch ? `?${cleanSearch}` : ''}${url.hash}`;
-      const printKey = `coa_printed:${cleanUrl}`;
-
-      if (sessionStorage.getItem(printKey)) {
-        return;
-      }
-
-      sessionStorage.setItem(printKey, '1');
       window.history.replaceState({}, '', cleanUrl);
 
       setTimeout(() => {
@@ -156,6 +149,13 @@
 })();
 </script>
 <style>
+  {% if auto_print %}
+  @media screen {
+    .no-print {
+      display: none !important;
+    }
+  }
+  {% endif %}
   .coa-save-popup {
     position: sticky;
     top: 12px;

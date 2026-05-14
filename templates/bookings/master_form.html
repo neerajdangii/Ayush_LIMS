@@ -9,6 +9,75 @@
   <div class="card-body">
     <form method="post" class="row g-3">
       {% csrf_token %}
+      {% if master_slug == 'sample-name' %}
+        {% if form.non_field_errors %}
+        <div class="col-12">
+          <div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div>
+        </div>
+        {% endif %}
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.name.id_for_label }}">Name <span class="text-danger">*</span></label>
+          {{ form.name }}
+          {{ form.name.errors }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.generic_name.id_for_label }}">Generic Name</label>
+          {{ form.generic_name }}
+          {{ form.generic_name.errors }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.sample_type.id_for_label }}">Sample Type</label>
+          {{ form.sample_type }}
+          {{ form.sample_type.errors }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.discipline.id_for_label }}">Discipline</label>
+          {{ form.discipline }}
+          {{ form.discipline.errors }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.test_group.id_for_label }}">Test Group</label>
+          {{ form.test_group }}
+          {{ form.test_group.errors }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.method.id_for_label }}">Method</label>
+          {{ form.method }}
+          {{ form.method.errors }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.rate.id_for_label }}">Rate</label>
+          {{ form.rate }}
+          {{ form.rate.errors }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.observationsheet_prefix.id_for_label }}">Observationsheet Prefix</label>
+          {{ form.observationsheet_prefix }}
+          {{ form.observationsheet_prefix.errors }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.customer.id_for_label }}">Customer</label>
+          {{ form.customer }}
+          {{ form.customer.errors }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+          {{ form.description }}
+          {{ form.description.errors }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="{{ form.limits.id_for_label }}">Limits</label>
+          {{ form.limits }}
+          {{ form.limits.errors }}
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+          <div class="form-check mt-2">
+            {{ form.is_active }}
+            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+          </div>
+        </div>
+      {% else %}
       {% for field in form %}
         {% if field.name == 'is_active' %}
         <div class="col-md-4 d-flex align-items-end">
@@ -30,10 +99,34 @@
         </div>
         {% endif %}
       {% endfor %}
+      {% endif %}
       <div class="col-12">
         <button class="btn btn-primary" type="submit">Save</button>
       </div>
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if master_slug == 'sample-name' %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const discipline = document.getElementById('id_discipline');
+    const testGroup = document.getElementById('id_test_group');
+    if (!discipline || !testGroup) {
+      return;
+    }
+    if (!discipline.value && !testGroup.value) {
+      discipline.value = 'Pharma';
+      testGroup.value = 'Chemical/Instrument Section';
+    }
+    discipline.addEventListener('change', () => {
+      if (discipline.value === 'Pharma' && !testGroup.value) {
+        testGroup.value = 'Chemical/Instrument Section';
+      }
+    });
+  });
+</script>
+{% endif %}
 {% endblock %}

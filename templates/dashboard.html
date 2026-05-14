@@ -74,6 +74,12 @@
         </a>
       </div>
       {% endfor %}
+      <div class="col-md-4">
+        <a class="btn btn-outline-secondary w-100 d-flex justify-content-between" href="{% url 'reports:tds_template_list' %}">
+          <span>TDS Master</span>
+          <span class="badge text-bg-light">{{ tds_templates_total }}</span>
+        </a>
+      </div>
     </div>
   </div>
   {% else %}

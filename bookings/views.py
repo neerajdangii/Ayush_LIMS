@@ -5,14 +5,15 @@ from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMix
 from django.core.paginator import Paginator
 from django.db import DatabaseError
 from django.db.models import Count, Q
+from django.db.models.deletion import ProtectedError
 from django.http import JsonResponse
 from django.http.response import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views import View
-from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
-from reports.models import Report, ReportRemark, ReportTemplate
+from reports.models import Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
 
 from .forms import (
     BookingForm,
@@ -47,7 +48,12 @@ MASTER_CONFIG = {
     },
     "submitter": {"model": SubmitterMaster, "form": SubmitterMasterForm, "title": "Submitter Master"},
     "manufacturer": {"model": ManufacturerMaster, "form": ManufacturerMasterForm, "title": "Manufacturer Master"},
-    "sample-name": {"model": SampleNameMaster, "form": SampleNameMasterForm, "title": "Sample Name Master"},
+    "sample-name": {
+        "model": SampleNameMaster,
+        "form": SampleNameMasterForm,
+        "title": "Sample Name Master",
+        "detail_attr": "generic_name",
+    },
     "test": {
         "model": TestMaster,
         "form": TestMasterForm,
@@ -76,6 +82,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["counts"] = Booking.objects.values("status").annotate(total=Count("id"))
         context["reports_total"] = Report.objects.count()
         context["report_templates_total"] = ReportTemplate.objects.count()
+        context["tds_templates_total"] = TDSDocumentTemplate.objects.count()
         context["masters"] = [
             {"slug": slug, "title": conf["title"], "count": conf["model"].objects.count()}
             for slug, conf in MASTER_CONFIG.items()
@@ -195,7 +202,7 @@ class BookingListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = (
-            Booking.objects.select_related("customer", "sample_name", "created_by", "updated_by", "approved_by")
+            Booking.objects.select_related("customer", "sample_name", "created_by", "updated_by", "approved_by", "report")
             .prefetch_related("test_to_be_performed")
             .order_by("-created_at")
         )
@@ -241,6 +248,53 @@ class BookingListView(LoginRequiredMixin, ListView):
         return context
 
 
+class BookingDetailView(LoginRequiredMixin, DetailView):
+    model = Booking
+    template_name = "bookings/booking_detail.html"
+    context_object_name = "booking"
+
+    def get_queryset(self):
+        return (
+            Booking.objects.select_related(
+                "customer",
+                "submitter",
+                "manufacturer",
+                "sample_name",
+                "protocol",
+                "uom",
+                "created_by",
+                "updated_by",
+                "approved_by",
+            )
+            .prefetch_related("test_to_be_performed")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["report"] = getattr(self.object, "report", None)
+        return context
+
+
+class BookingDeleteView(PermissionRequiredMixin, DeleteView):
+    permission_required = "bookings.delete_booking"
+    model = Booking
+    template_name = "bookings/booking_confirm_delete.html"
+    success_url = reverse_lazy("bookings:list")
+
+    def form_valid(self, form):
+        booking_id = self.object.tracking_code
+        try:
+            response = super().form_valid(form)
+        except ProtectedError:
+            messages.error(
+                self.request,
+                "Cannot delete this booking because it is referenced by protected records.",
+            )
+            return redirect("bookings:detail", pk=self.object.pk)
+        messages.success(self.request, f"Booking {booking_id} deleted.")
+        return response
+
+
 class BookingApproveView(RoleRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "bookings.change_booking"
     required_roles = ("Checked By",)
@@ -250,8 +304,12 @@ class BookingApproveView(RoleRequiredMixin, PermissionRequiredMixin, View):
         booking = get_object_or_404(Booking, pk=pk)
         if booking.status == Booking.Status.APPROVED:
             messages.info(request, "Booking is already approved.")
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({"assigned": True, "report_url": reverse("reports:approval", kwargs={"booking_pk": booking.pk})})
             return redirect("bookings:list")
         booking.approve(request.user)
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"assigned": True, "report_url": reverse("reports:approval", kwargs={"booking_pk": booking.pk})})
         messages.success(request, f"Booking approved. Booking ID: {booking.tracking_code}")
         return redirect("bookings:list")
 
@@ -276,7 +334,7 @@ class MasterListView(LoginRequiredMixin, TemplateView):
             rows.append(
                 {
                     "object": obj,
-                    "primary": getattr(obj, primary_attr, ""),
+                    "primary": getattr(obj, "display_name", getattr(obj, primary_attr, "")),
                     "detail": getattr(obj, detail_attr, "") if detail_attr else "",
                     "created_at": getattr(obj, "created_at", None),
                 }
@@ -389,6 +447,29 @@ class InlineMasterCreateView(RoleRequiredMixin, View):
         defaults = {"is_active": True}
         if slug == "customer":
             defaults["address"] = request.POST.get("address", "").strip()
+        elif slug == "sample-name":
+            defaults.update(
+                {
+                    "generic_name": request.POST.get("generic_name", "").strip(),
+                    "sample_type": request.POST.get("sample_type", "").strip(),
+                    "discipline": request.POST.get("discipline", "").strip(),
+                    "test_group": request.POST.get("test_group", "").strip(),
+                    "method": request.POST.get("method", "").strip(),
+                    "rate": request.POST.get("rate", "").strip(),
+                    "observationsheet_prefix": request.POST.get("observationsheet_prefix", "").strip(),
+                    "customer": request.POST.get("customer", "").strip(),
+                    "description": request.POST.get("description", "").strip(),
+                    "limits": request.POST.get("limits", "").strip(),
+                }
+            )
+            if not defaults["generic_name"]:
+                return JsonResponse({"error": "Generic Name is required."}, status=400)
+            if defaults["sample_type"] not in dict(SampleNameMaster.SampleType.choices):
+                return JsonResponse({"error": "Sample Type is required."}, status=400)
+            if defaults["discipline"] and defaults["discipline"] not in dict(SampleNameMaster.Discipline.choices):
+                return JsonResponse({"error": "Invalid Discipline."}, status=400)
+            if defaults["test_group"] and defaults["test_group"] not in dict(SampleNameMaster.TestGroup.choices):
+                return JsonResponse({"error": "Invalid Test Group."}, status=400)
 
         obj, created = conf["model"].objects.get_or_create(name=name, defaults=defaults)
         if not obj.is_active:
@@ -400,6 +481,10 @@ class InlineMasterCreateView(RoleRequiredMixin, View):
                 "id": obj.pk,
                 "name": obj.name,
                 "address": getattr(obj, "address", ""),
+                "generic_name": getattr(obj, "generic_name", ""),
+                "discipline": getattr(obj, "discipline", ""),
+                "test_group": getattr(obj, "test_group", ""),
+                "sample_type": getattr(obj, "sample_type", ""),
                 "created": created,
             }
         )

@@ -80,20 +80,26 @@
               {% endwith %}
             </td>
             <td>{{ b.customer.name }}</td>
-            <td>{{ b.sample_name.name }}</td>
+            <td>{{ b.sample_name.display_name }}</td>
             <td>{{ b.get_booking_type_display }}</td>
             <td>
-              {% if b.status == 'approved' %}
-              <span class="badge text-bg-success">Approved</span>
+              {% if b.is_reported %}
+              <span class="badge text-bg-primary">Reported</span>
+              {% elif b.status == 'approved' %}
+              <span class="badge text-bg-success">Assigned</span>
               {% else %}
-              <span class="badge text-bg-warning">Pending</span>
+              <span class="badge text-bg-warning">Sample Received</span>
               {% endif %}
               <div class="text-muted small">Changed by: {{ b.updated_by_display }}</div>
             </td>
             <td>
+              <a class="btn btn-sm btn-outline-dark" href="{% url 'bookings:detail' b.pk %}">View</a>
               {% if user|has_any_role:"Staff,Manager,Analyst,Admin" %}
               <a class="btn btn-sm btn-outline-primary" href="{% url 'bookings:edit' b.pk %}">Edit</a>
               <a class="btn btn-sm btn-outline-secondary" href="{% url 'bookings:create' %}?duplicate={{ b.pk }}">Duplicate</a>
+              {% endif %}
+              {% if perms.bookings.delete_booking %}
+              <a class="btn btn-sm btn-outline-danger" href="{% url 'bookings:delete' b.pk %}">Delete</a>
               {% endif %}
               {% if b.status == 'approved' %}
                 {% if user|has_role:"Checked By" %}

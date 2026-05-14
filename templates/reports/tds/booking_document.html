@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block title %}{{ document_title }} | Booking {{ booking.tracking_code }}{% endblock %}
+{% block extra_head %}
+<style>
+  {% if print_mode %}
+  @media screen {
+    html,
+    body {
+      background: #e5e7eb !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    body::before,
+    nav,
+    .tds-document-actions {
+      display: none !important;
+    }
+    main.app-shell {
+      width: 100% !important;
+      max-width: none !important;
+      margin: 0 !important;
+      padding: 8mm 0 !important;
+      box-sizing: border-box;
+    }
+    .tds-print-sheet {
+      width: min(210mm, calc(100% - 16mm));
+      min-height: 297mm;
+      margin: 0 auto !important;
+      padding: 8mm !important;
+      box-sizing: border-box;
+    }
+    .tds-print-sheet,
+    .tds-print-sheet .card-body {
+      box-shadow: none !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      background: #fff !important;
+    }
+    .tds-print-sheet .card-body {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+  }
+  {% endif %}
+  .tds-template-content {
+    color: #000;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 14px;
+  }
+  .tds-template-content > :last-child { margin-bottom: 0 !important; }
+  .tds-template-content p:empty { display: none !important; }
+  .tds-template-content table {
+    width: 100%;
+    border-collapse: collapse !important;
+  }
+  .tds-template-content table,
+  .tds-template-content th,
+  .tds-template-content td {
+    border: 1px solid #000 !important;
+    border-color: #000 !important;
+  }
+  .tds-template-content th,
+  .tds-template-content td {
+    padding: 2px 4px;
+    vertical-align: top;
+  }
+  @media print {
+    @page {
+      size: A4;
+      margin: 8mm;
+    }
+    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    body::before, nav, .tds-document-actions { display: none !important; }
+    main.app-shell { width: 100%; margin: 0 !important; padding: 0 !important; }
+    .tds-print-sheet,
+    .tds-print-sheet .card-body {
+      box-shadow: none !important;
+      border: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tds-document-actions d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h5 class="mb-0">{{ document_title }} - Booking {{ booking.tracking_code }}</h5>
+    <div class="text-muted small">{{ booking.sample_name.name|default:"N.A" }} | {{ booking.sample_reg_no|default:"N.A" }}</div>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'bookings:detail' booking.pk %}">Back to Booking</a>
+    <a class="btn btn-sm btn-outline-primary" href="{% url 'reports:tds_template_list' %}">TDS Master</a>
+    <button class="btn btn-sm btn-primary" type="button" onclick="window.print()">Print</button>
+  </div>
+</div>
+
+<div class="card shadow-sm tds-print-sheet">
+  <div class="card-body">
+    {% if rendered_templates or fallback_ads_templates %}
+      {% for item in rendered_templates %}
+      <section>
+        {% if item.content %}
+        <div class="tds-template-content">{{ item.content }}</div>
+        {% else %}
+        <div class="alert alert-info py-2 mb-0">
+          Printable content is empty.
+          {% if item.template.source_file %}
+          Source file: <a href="{{ item.template.source_file.url }}" target="_blank" rel="noopener">open uploaded file</a>
+          {% endif %}
+        </div>
+        {% endif %}
+      </section>
+      {% endfor %}
+
+      {% for item in fallback_ads_templates %}
+      <section>
+        <div class="tds-template-content">{{ item.content }}</div>
+      </section>
+      {% endfor %}
+    {% else %}
+      <div class="alert alert-info mb-0">
+        No active {{ document_title }} template found for this booking. Add one in TDS Template Master.
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if print_mode %}
+<script>
+  (function () {
+    let printed = false;
+
+    function leavePrintPage() {
+      if (!printed) {
+        return;
+      }
+      window.close();
+      window.setTimeout(function () {
+        if (window.history.length > 1) {
+          window.history.back();
+        }
+      }, 300);
+    }
+
+    window.addEventListener('afterprint', leavePrintPage);
+    window.addEventListener('load', function () {
+      window.setTimeout(function () {
+        printed = true;
+        window.print();
+      }, 250);
+    });
+  })();
+</script>
+{% endif %}
+{% endblock %}

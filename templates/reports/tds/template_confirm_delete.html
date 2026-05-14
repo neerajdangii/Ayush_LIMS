@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}Delete TDS Template | LIMS{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-header">
+    <h5 class="mb-0">Delete TDS Template</h5>
+  </div>
+  <div class="card-body">
+    <p>Delete <strong>{{ object.name }}</strong> from {{ object.get_document_type_display }} templates?</p>
+    <form method="post" class="d-flex gap-2">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Delete</button>
+      <a href="{% url 'reports:tds_template_list' %}" class="btn btn-outline-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

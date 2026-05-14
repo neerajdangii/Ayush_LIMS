@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     BookingApproveView,
     BookingCreateView,
+    BookingDeleteView,
+    BookingDetailView,
     BookingListView,
     BookingUpdateView,
     GetSimilarBookingDataView,
@@ -18,7 +20,9 @@ app_name = "bookings"
 urlpatterns = [
     path("", BookingListView.as_view(), name="list"),
     path("new/", BookingCreateView.as_view(), name="create"),
+    path("view/<int:pk>/", BookingDetailView.as_view(), name="detail"),
     path("<int:pk>/edit/", BookingUpdateView.as_view(), name="edit"),
+    path("<int:pk>/delete/", BookingDeleteView.as_view(), name="delete"),
     path("<int:pk>/approve/", BookingApproveView.as_view(), name="approve"),
     path("api/similar-booking-data/", GetSimilarBookingDataView.as_view(), name="api_similar_booking_data"),
     path("masters/<slug:slug>/", MasterListView.as_view(), name="master_list"),

@@ -5,6 +5,7 @@ from .views import (
     COAPDFView,
     COAPlainDocumentView,
     COAPrintView,
+    BookingTDSDocumentView,
     PublicCOAPrintView,
     ReportTemplateCreateView,
     ReportTemplateApiListView,
@@ -15,6 +16,11 @@ from .views import (
     ReportCreateOrUpdateView,
     ReportApiDetailView,
     ReportListView,
+    TDSDocumentTemplateCreateView,
+    TDSDocumentTemplateDeleteView,
+    TDSDocumentTemplateExtractView,
+    TDSDocumentTemplateListView,
+    TDSDocumentTemplateUpdateView,
 )
 
 app_name = "reports"
@@ -28,6 +34,12 @@ urlpatterns = [
     path("templates/<int:pk>/content/", ReportTemplateContentView.as_view(), name="template_content"),
     path("templates/<int:pk>/edit/", ReportTemplateUpdateView.as_view(), name="template_edit"),
     path("templates/<int:pk>/delete/", ReportTemplateDeleteView.as_view(), name="template_delete"),
+    path("tds/templates/", TDSDocumentTemplateListView.as_view(), name="tds_template_list"),
+    path("tds/templates/add/", TDSDocumentTemplateCreateView.as_view(), name="tds_template_add"),
+    path("tds/templates/extract/", TDSDocumentTemplateExtractView.as_view(), name="tds_template_extract"),
+    path("tds/templates/<int:pk>/edit/", TDSDocumentTemplateUpdateView.as_view(), name="tds_template_edit"),
+    path("tds/templates/<int:pk>/delete/", TDSDocumentTemplateDeleteView.as_view(), name="tds_template_delete"),
+    path("booking/<int:booking_pk>/tds/<slug:document_type>/", BookingTDSDocumentView.as_view(), name="booking_tds_document"),
     path("booking/<int:booking_pk>/", ReportCreateOrUpdateView.as_view(), name="approval"),
     path("<int:pk>/coa/edit/", COAEditView.as_view(), name="coa_edit"),
     path("<int:pk>/coa/print/", COAPrintView.as_view(), name="coa_print"),

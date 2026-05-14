@@ -10,7 +10,10 @@
 <div class="card shadow-sm">
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5 class="mb-0">Reports</h5>
-    <a href="{% url 'reports:template_list' %}" class="btn btn-sm btn-outline-primary">Templates</a>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{% url 'reports:tds_template_list' %}" class="btn btn-sm btn-outline-secondary">TDS Master</a>
+      <a href="{% url 'reports:template_list' %}" class="btn btn-sm btn-outline-primary">Templates</a>
+    </div>
   </div>
   <div class="card-body table-responsive">
     <form method="get" class="row g-2 mb-3">
@@ -29,7 +32,9 @@
       <div class="col-md-2">
         <select name="status" class="form-select">
           <option value="">All Status</option>
+          <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
           <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+          <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
           <option value="pass" {% if status_filter == 'pass' %}selected{% endif %}>Pass</option>
         </select>
       </div>
@@ -75,23 +80,26 @@
             {% endif %}
           </td>
           <td><span class="tracking-chip">{{ r.booking.tracking_code }}</span></td>
-          <td>{{ r.booking.sample_name.name }}</td>
+          <td>{{ r.booking.sample_name.display_name }}</td>
           <td>{{ r.booking.customer.name|default:'-' }}</td>
           <td>{{ r.remark_text|default:'-'|truncatechars:120 }}</td>
           <td>
             {% if r.final_outcome == 'pass' %}
             <span class="badge text-bg-success">Pass</span>
+            {% elif r.status == 'manager_approved' or r.status == 'incharge_approved' %}
+            <span class="badge text-bg-primary">Approved</span>
             {% else %}
             <span class="badge text-bg-secondary">Draft</span>
             {% endif %}
+            <div class="text-muted small">{{ r.get_status_display }}</div>
           </td>
           <td>{{ r.updated_by_display }}</td>
           <td>
             <div class="d-flex flex-wrap gap-2">
-              <a class="btn btn-sm btn-outline-primary" href="{% url 'reports:coa_print' r.pk %}">COA</a>
-              <a class="btn btn-sm btn-outline-success" href="{% url 'reports:coa_print' r.pk %}?plain=1">COA Plain</a>
-              <a class="btn btn-sm btn-outline-info" href="{% url 'reports:coa_print' r.pk %}?doc=test">Test Report</a>
-              <a class="btn btn-sm btn-outline-warning" href="{% url 'reports:coa_print' r.pk %}?doc=test&plain=1">Test Report Plain</a>
+              <a class="btn btn-sm btn-outline-primary" href="{% url 'reports:coa_print' r.pk %}?autoprint=1" target="_blank" rel="noopener">COA</a>
+              <a class="btn btn-sm btn-outline-success" href="{% url 'reports:coa_print' r.pk %}?plain=1&autoprint=1" target="_blank" rel="noopener">COA Plain</a>
+              <a class="btn btn-sm btn-outline-info" href="{% url 'reports:coa_print' r.pk %}?doc=test&autoprint=1" target="_blank" rel="noopener">Test Report</a>
+              <a class="btn btn-sm btn-outline-warning" href="{% url 'reports:coa_print' r.pk %}?doc=test&plain=1&autoprint=1" target="_blank" rel="noopener">Test Report Plain</a>
               <a class="btn btn-sm btn-primary" href="{% url 'reports:coa_edit' r.pk %}">Edit</a>
               <a class="btn btn-sm btn-outline-dark" href="{% url 'reports:coa_print' r.pk %}">View</a>
             </div>

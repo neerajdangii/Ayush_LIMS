@@ -1,14 +1,72 @@
+from html import escape
+from pathlib import Path
+import zipfile
+import xml.etree.ElementTree as ET
+
 from django import forms
 from django.db.models import Q
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from .models import Report, ReportRemark, ReportTemplate
+from .models import Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
 from .template_library import build_generic_result_table, populate_main_table_rows
 
 DATE_FORMAT_DMY = "%d/%m/%Y"
 DATE_INPUT_FORMAT = "%Y-%m-%d"
 DATE_PLACEHOLDER = "DD/MM/YYYY"
+
+WORD_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+
+
+def _extract_docx_printable_html(uploaded_file):
+    uploaded_file.seek(0)
+    with zipfile.ZipFile(uploaded_file) as docx:
+        xml_content = docx.read("word/document.xml")
+    root = ET.fromstring(xml_content)
+    body = root.find("w:body", WORD_NS)
+    if body is None:
+        return ""
+
+    blocks = []
+    for child in body:
+        tag_name = child.tag.rsplit("}", 1)[-1]
+        if tag_name == "p":
+            text = "".join(node.text or "" for node in child.findall(".//w:t", WORD_NS)).strip()
+            if text:
+                blocks.append(f"<p>{escape(text)}</p>")
+        elif tag_name == "tbl":
+            rows = []
+            for row in child.findall(".//w:tr", WORD_NS):
+                cells = []
+                for cell in row.findall("./w:tc", WORD_NS):
+                    cell_text = " ".join(
+                        "".join(node.text or "" for node in para.findall(".//w:t", WORD_NS)).strip()
+                        for para in cell.findall("./w:p", WORD_NS)
+                    ).strip()
+                    cells.append(f"<td>{escape(cell_text)}</td>")
+                if cells:
+                    rows.append(f"<tr>{''.join(cells)}</tr>")
+            if rows:
+                blocks.append(f"<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\"><tbody>{''.join(rows)}</tbody></table>")
+    return "\n".join(blocks)
+
+
+def _extract_uploaded_printable_content(uploaded_file):
+    if not uploaded_file:
+        return ""
+    suffix = Path(uploaded_file.name or "").suffix.lower()
+    uploaded_file.seek(0)
+    try:
+        if suffix == ".docx":
+            return _extract_docx_printable_html(uploaded_file)
+        if suffix in {".html", ".htm"}:
+            return uploaded_file.read().decode("utf-8", errors="ignore").strip()
+        if suffix == ".txt":
+            text = uploaded_file.read().decode("utf-8", errors="ignore").strip()
+            return "\n".join(f"<p>{escape(line)}</p>" for line in text.splitlines() if line.strip())
+    finally:
+        uploaded_file.seek(0)
+    return ""
 
 
 def _local_date(value):
@@ -293,3 +351,50 @@ class ReportTemplateForm(forms.ModelForm):
     def clean_content(self):
         content = self.cleaned_data.get("content") or ""
         return content.strip() if isinstance(content, str) else content
+
+
+class TDSDocumentTemplateForm(forms.ModelForm):
+    class Meta:
+        model = TDSDocumentTemplate
+        fields = ["document_type", "name", "test", "description", "content", "source_file", "is_active"]
+        widgets = {
+            "document_type": forms.Select(attrs={"class": "form-select"}),
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "test": forms.Select(attrs={"class": "form-select"}),
+            "description": forms.TextInput(attrs={"class": "form-control"}),
+            "content": forms.Textarea(
+                attrs={
+                    "class": "form-control tinymce-editor",
+                    "rows": 18,
+                    "data-editor": "tinymce",
+                }
+            ),
+            "source_file": forms.ClearableFileInput(attrs={"class": "form-control", "accept": ".doc,.docx,.pdf,.html,.htm,.txt"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "test": "Test link for ADS",
+            "content": "Printable Content",
+            "source_file": "Word/PDF Source File",
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        document_type = cleaned_data.get("document_type")
+        test = cleaned_data.get("test")
+        content = (cleaned_data.get("content") or "").strip()
+        source_file = cleaned_data.get("source_file") or getattr(self.instance, "source_file", None)
+        uploaded_file = cleaned_data.get("source_file")
+
+        if document_type == TDSDocumentTemplate.DocumentType.ADS and not test:
+            raise forms.ValidationError("ADS templates should be linked with a test.")
+        if not content and uploaded_file:
+            content = _extract_uploaded_printable_content(uploaded_file)
+            if not content:
+                raise forms.ValidationError(
+                    "Could not read printable content from this file. Upload a .docx, .html, or .txt file, or paste content manually."
+                )
+        if not content and not source_file:
+            raise forms.ValidationError("Add printable content or upload a source file.")
+        cleaned_data["content"] = content
+        return cleaned_data

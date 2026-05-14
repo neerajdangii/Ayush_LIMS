@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Delete Booking | LIMS{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-header">
+    <h5 class="mb-0">Delete Booking</h5>
+  </div>
+  <div class="card-body">
+    <p>
+      Delete booking <strong>{{ object.tracking_code }}</strong>
+      {% if object.sample_name %}for <strong>{{ object.sample_name.display_name }}</strong>{% endif %}?
+    </p>
+    <p class="text-muted">This will also remove report data linked only to this booking.</p>
+    <form method="post" class="d-flex gap-2">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Delete Booking</button>
+      <a class="btn btn-outline-secondary" href="{% url 'bookings:detail' object.pk %}">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

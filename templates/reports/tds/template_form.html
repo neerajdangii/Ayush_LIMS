@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ page_title }} | LIMS{% endblock %}
+{% block extra_head %}
+<script>
+  const arlStaticPrefix = "{% static '' %}";
+  window.tinyMCEPreInit = {
+    base: `${arlStaticPrefix}js/tinymce`,
+    baseURL: `${arlStaticPrefix}js/tinymce`,
+    suffix: ".min"
+  };
+  window.arlTinyMceConfig = {
+    baseUrl: `${arlStaticPrefix}js/tinymce`,
+    skinUrl: `${arlStaticPrefix}js/tinymce/skins/ui/oxide`,
+    contentCss: "{% static 'js/tinymce/skins/content/default/content.min.css' %}"
+  };
+</script>
+<script src="{% static 'js/tinymce/tinymce.min.js' %}"></script>
+{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">{{ page_title }}</h5>
+    <a href="{% url 'reports:tds_template_list' %}" class="btn btn-sm btn-outline-secondary">Back</a>
+  </div>
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data" class="row g-3" id="tds-template-form">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="col-12">
+        <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+      </div>
+      {% endif %}
+
+      <div class="col-md-3">
+        <label for="{{ form.document_type.id_for_label }}">Document Type</label>
+        {{ form.document_type }}
+        {{ form.document_type.errors }}
+      </div>
+      <div class="col-md-5">
+        <label for="{{ form.name.id_for_label }}">Template Name</label>
+        {{ form.name }}
+        {{ form.name.errors }}
+      </div>
+      <div class="col-md-4">
+        <label for="{{ form.test.id_for_label }}">Test link for ADS</label>
+        {{ form.test }}
+        {{ form.test.errors }}
+      </div>
+      <div class="col-12">
+        <label for="{{ form.description.id_for_label }}">Description</label>
+        {{ form.description }}
+        {{ form.description.errors }}
+      </div>
+      <div class="col-12">
+        <label for="{{ form.source_file.id_for_label }}">Word/PDF Source File</label>
+        {{ form.source_file }}
+        {{ form.source_file.errors }}
+        <div class="text-muted small mt-1" id="source-file-help">Upload a DOCX/HTML/TXT file to auto-fill Printable Content. PDF/DOC can be stored as source files, but paste printable content manually.</div>
+      </div>
+      <div class="col-12">
+        <label for="{{ form.content.id_for_label }}">Printable Content</label>
+        {{ form.content }}
+        {{ form.content.errors }}
+        <div class="text-muted small mt-1">
+          {% verbatim %}You can use booking placeholders such as {{ sample_name }}, {{ sample_number }}, {{ batch_no }}, {{ sample_reg_no }}, {{ customer_name }}, {{ sample_receipt_date }}.{% endverbatim %}
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="form-check">
+          {{ form.is_active }}
+          <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+        </div>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" type="submit" id="tds-template-save-btn">Save Template</button>
+        <a class="btn btn-outline-secondary" href="{% url 'reports:tds_template_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    let tries = 0;
+
+    function editorConfig() {
+      return {
+        base_url: window.arlTinyMceConfig.baseUrl,
+        suffix: '.min',
+        skin_url: window.arlTinyMceConfig.skinUrl,
+        content_css: window.arlTinyMceConfig.contentCss,
+        selector: 'textarea[data-editor="tinymce"]',
+        height: 620,
+        menubar: 'file edit view insert format table tools',
+        branding: false,
+        convert_urls: false,
+        valid_elements: '*[*]',
+        extended_valid_elements: 'table[*],thead[*],tbody[*],tfoot[*],tr[*],td[*],th[*],colgroup[*],col[*],span[*],p[*],div[*]',
+        paste_data_images: true,
+        paste_merge_formats: false,
+        content_style: 'body{font-family:Calibri,Arial,sans-serif;font-size:12pt;line-height:1.25;padding:12px;} table{border-collapse:collapse;} td,th{border:1px solid #111;padding:4px;vertical-align:top;}',
+        table_default_attributes: { border: '1', style: 'border-collapse:collapse;width:100%;' },
+        plugins: 'lists table link code advlist charmap searchreplace wordcount preview visualblocks',
+        toolbar_sticky: true,
+        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | table | removeformat code preview',
+        font_family_formats: 'Calibri=calibri,arial,sans-serif;Arial=arial,helvetica,sans-serif;Times New Roman=times new roman,times,serif;Courier New=courier new,courier,monospace',
+        license_key: 'gpl'
+      };
+    }
+
+    function syncEditor() {
+      if (window.tinymce) {
+        window.tinymce.triggerSave();
+      }
+    }
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) {
+        return parts.pop().split(';').shift();
+      }
+      return '';
+    }
+
+    function setEditorContent(content) {
+      const textarea = document.querySelector('textarea[data-editor="tinymce"]');
+      if (!textarea) {
+        return;
+      }
+      const editor = window.tinymce ? window.tinymce.get(textarea.id) : null;
+      if (editor) {
+        editor.setContent(content || '');
+        editor.focus();
+      }
+      textarea.value = content || '';
+    }
+
+    function showUploadStatus(message, isError) {
+      const help = document.getElementById('source-file-help');
+      if (!help) {
+        return;
+      }
+      help.textContent = message;
+      help.classList.toggle('text-danger', Boolean(isError));
+      help.classList.toggle('text-muted', !isError);
+    }
+
+    function initSourceFileImport() {
+      const input = document.getElementById('{{ form.source_file.id_for_label }}');
+      if (!input) {
+        return;
+      }
+      input.addEventListener('change', function () {
+        const file = input.files && input.files[0];
+        if (!file) {
+          return;
+        }
+
+        const extension = file.name.split('.').pop().toLowerCase();
+        if (!['docx', 'html', 'htm', 'txt'].includes(extension)) {
+          showUploadStatus('This file will be stored as source only. Use DOCX/HTML/TXT to load content into the editor.', true);
+          return;
+        }
+
+        const data = new FormData();
+        data.append('source_file', file);
+        showUploadStatus('Reading file and loading content into the editor...', false);
+
+        fetch("{% url 'reports:tds_template_extract' %}", {
+          method: 'POST',
+          headers: { 'X-CSRFToken': getCookie('csrftoken') },
+          body: data
+        })
+          .then(function (response) {
+            return response.json().then(function (payload) {
+              if (!response.ok) {
+                throw new Error(payload.error || 'Could not read this file.');
+              }
+              return payload;
+            });
+          })
+          .then(function (payload) {
+            setEditorContent(payload.content);
+            showUploadStatus('Content loaded into the editor. Review and save the template.', false);
+          })
+          .catch(function (error) {
+            showUploadStatus(error.message, true);
+          });
+      });
+    }
+
+    function initEditor() {
+      const target = document.querySelector('textarea[data-editor="tinymce"]');
+      if (!target) {
+        return;
+      }
+      if (!window.tinymce || typeof window.tinymce.init !== 'function') {
+        if (tries < 40) {
+          tries += 1;
+          window.setTimeout(initEditor, 150);
+        }
+        return;
+      }
+      if (window.tinymce.get(target.id)) {
+        return;
+      }
+      window.tinymce.init(editorConfig());
+
+      const form = document.getElementById('tds-template-form');
+      const saveButton = document.getElementById('tds-template-save-btn');
+      if (form) {
+        form.addEventListener('submit', syncEditor);
+      }
+      if (saveButton) {
+        saveButton.addEventListener('click', syncEditor);
+      }
+      initSourceFileImport();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initEditor);
+    } else {
+      initEditor();
+    }
+    window.addEventListener('load', initEditor);
+  })();
+</script>
+{% endblock %}

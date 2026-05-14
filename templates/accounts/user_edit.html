@@ -67,6 +67,11 @@
         <label class="form-check-label" for="id_can_edit_masters">Master Edit Access</label>
       </div>
 
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_delete_bookings }}
+        <label class="form-check-label" for="id_can_delete_bookings">Delete Booking Access</label>
+      </div>
+
       <div class="col-md-12">
         <label class="form-label" for="id_signature_file">Signature file</label>
         {{ form.signature_file }}

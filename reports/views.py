@@ -16,9 +16,10 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.http import HttpResponse
 from django.template.defaultfilters import linebreaksbr
+from django.template import engines
 from django.template.loader import render_to_string
 from django.utils.html import escape
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView, View
 from django.utils.decorators import method_decorator
 
 try:
@@ -29,8 +30,8 @@ except (ImportError, OSError):
 from bookings.models import Booking
 from bookings.permissions import RoleRequiredMixin, has_role
 
-from .forms import COAEditForm, ReportApprovalForm, ReportTemplateForm
-from .models import Report, ReportRemark, ReportTemplate
+from .forms import COAEditForm, ReportApprovalForm, ReportTemplateForm, TDSDocumentTemplateForm, _extract_uploaded_printable_content
+from .models import Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
 
 
 PUBLIC_REPORT_ALLOWED_STATUSES = {
@@ -108,6 +109,102 @@ def _get_public_report_or_404(pk):
     return get_object_or_404(Report.objects.select_related("booking", "booking__customer", "booking__sample_name"), pk=pk, status__in=PUBLIC_REPORT_ALLOWED_STATUSES)
 
 
+def _booking_template_context(booking, request):
+    sample_name = booking.sample_name.name if booking.sample_name_id else ""
+    batch_no = booking.batch_no or ""
+    return {
+        "booking": booking,
+        "sample_name": sample_name,
+        "sample_display_name": sample_name,
+        "sample_type": booking.sample_type,
+        "sample_qty": booking.sample_qty,
+        "uom": booking.uom.name if booking.uom_id else "",
+        "sample_number": batch_no,
+        "sample_no": batch_no,
+        "sample_reg_no": booking.sample_reg_no,
+        "booking_id": booking.tracking_code,
+        "batch_no": batch_no,
+        "batch_size": booking.batch_size,
+        "customer_name": booking.customer.name if booking.customer_id else "",
+        "customer_address": booking.customer.address if booking.customer_id else "",
+        "manufacturer_name": booking.manufacturer.name if booking.manufacturer_id else "",
+        "submitter_name": booking.submitter.name if booking.submitter_id else "",
+        "protocol_name": booking.protocol.name if booking.protocol_id else "",
+        "sample_receipt_date": _format_report_date(booking.sample_receipt_date),
+        "booking_date": _format_report_date(booking.booking_date),
+        "letter_date": _format_report_date(booking.letter_date),
+        "manufacture_date": _format_report_date(booking.manufacture_date, month_year_only=True),
+        "expiry_retest_date": _format_report_date(booking.expiry_retest_date, month_year_only=True),
+        "license_no": booking.license_no,
+        "collected_by": booking.collected_by_name,
+        "sample_location": booking.sample_location,
+        "sample_condition": booking.sample_condition,
+        "packaging_mode": booking.packaging_mode,
+        "sampling_procedure": booking.sampling_procedure,
+        "request": request,
+    }
+
+
+def _render_tds_content(content, booking, request):
+    if not content:
+        return ""
+    template = engines["django"].from_string(content)
+    rendered_content = template.render(_booking_template_context(booking, request))
+    rendered_content = _strip_tds_trailing_empty_blocks(rendered_content)
+    rendered_content = _unwrap_tds_outer_table(rendered_content)
+    rendered_content = _fill_tds_booking_labels(rendered_content, booking)
+    return _strip_tds_trailing_empty_blocks(rendered_content)
+
+
+def _unwrap_tds_outer_table(content):
+    wrapper_re = re.compile(
+        r"^\s*<table\b(?P<table_attrs>[^>]*)>\s*"
+        r"(?:<colgroup>.*?</colgroup>\s*)?"
+        r"<tbody>\s*<tr\b[^>]*>\s*<td\b(?P<td_attrs>[^>]*)>\s*"
+        r"(?P<body>.*)"
+        r"\s*</td>\s*</tr>\s*</tbody>\s*</table>\s*$",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    match = wrapper_re.match(content)
+    if not match:
+        return content
+
+    table_attrs = match.group("table_attrs") or ""
+    td_attrs = match.group("td_attrs") or ""
+    is_borderless = re.search(r'\bborder\s*=\s*["\']?0\b', table_attrs, flags=re.IGNORECASE) or not re.search(
+        r"border-width\s*:", table_attrs + td_attrs, flags=re.IGNORECASE
+    )
+    if not is_borderless:
+        return content
+    return match.group("body").strip()
+
+
+def _strip_tds_trailing_empty_blocks(content):
+    empty_block = r"<(p|div|span)[^>]*>(?:\s|&nbsp;|<br\s*/?>)*</\1>"
+    return re.sub(rf"(?:\s*{empty_block})+\s*$", "", content, flags=re.IGNORECASE)
+
+
+def _fill_tds_booking_labels(content, booking):
+    sample_name = booking.sample_name.name if booking.sample_name_id else ""
+    batch_no = booking.batch_no or ""
+    replacements = (
+        ("Sample Name", sample_name),
+        ("Sample Number", batch_no),
+    )
+
+    for label, value in replacements:
+        if not value:
+            continue
+        content = re.sub(
+            rf"({label}\s*:\s*)(?=(?:&nbsp;|\s|</(?:td|th|p|div|span|strong|b)>|<br\s*/?>))",
+            rf"\g<1>{escape(value)}",
+            content,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    return content
+
+
 class ReportListView(PermissionRequiredMixin, RoleRequiredMixin, ListView):
     permission_required = "reports.view_report"
     required_roles = ("Manager", "Incharge", "Analyst", "Admin")
@@ -141,6 +238,10 @@ class ReportListView(PermissionRequiredMixin, RoleRequiredMixin, ListView):
 
         if status_filter == Report.FinalOutcome.PASS:
             qs = qs.filter(final_outcome=Report.FinalOutcome.PASS)
+        elif status_filter == Report.Status.DRAFT:
+            qs = qs.filter(status=Report.Status.DRAFT)
+        elif status_filter == "approved":
+            qs = qs.filter(status__in=[Report.Status.MANAGER_APPROVED, Report.Status.INCHARGE_APPROVED])
         elif status_filter == "pending":
             qs = qs.exclude(final_outcome=Report.FinalOutcome.PASS)
 
@@ -181,6 +282,176 @@ class ReportListView(PermissionRequiredMixin, RoleRequiredMixin, ListView):
                 on_each_side=2,
                 on_ends=1,
             )
+        return context
+
+
+class TDSDocumentTemplateListView(PermissionRequiredMixin, RoleRequiredMixin, ListView):
+    permission_required = "reports.view_tdsdocumenttemplate"
+    required_roles = ("Admin", "Manager", "Analyst")
+    model = TDSDocumentTemplate
+    template_name = "reports/tds/template_list.html"
+    context_object_name = "templates"
+
+    def get_queryset(self):
+        qs = TDSDocumentTemplate.objects.select_related("test").order_by("document_type", "test__name", "name")
+        document_type = self.request.GET.get("type", "").strip()
+        if document_type:
+            qs = qs.filter(document_type=document_type)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["document_types"] = TDSDocumentTemplate.DocumentType.choices
+        context["selected_type"] = self.request.GET.get("type", "").strip()
+        return context
+
+
+class TDSDocumentTemplateCreateView(PermissionRequiredMixin, RoleRequiredMixin, CreateView):
+    permission_required = "reports.add_tdsdocumenttemplate"
+    required_roles = ("Admin", "Manager")
+    model = TDSDocumentTemplate
+    form_class = TDSDocumentTemplateForm
+    template_name = "reports/tds/template_form.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Add TDS Template"
+        return context
+
+    def get_success_url(self):
+        messages.success(self.request, "TDS template added.")
+        return reverse("reports:tds_template_list")
+
+
+class TDSDocumentTemplateExtractView(PermissionRequiredMixin, RoleRequiredMixin, View):
+    permission_required = "reports.add_tdsdocumenttemplate"
+    required_roles = ("Admin", "Manager")
+
+    def has_permission(self):
+        return self.request.user.has_perm("reports.add_tdsdocumenttemplate") or self.request.user.has_perm(
+            "reports.change_tdsdocumenttemplate"
+        )
+
+    def post(self, request, *args, **kwargs):
+        uploaded_file = request.FILES.get("source_file")
+        if not uploaded_file:
+            return JsonResponse({"error": "Please choose a DOCX, HTML, or TXT file."}, status=400)
+
+        content = _extract_uploaded_printable_content(uploaded_file)
+        if not content:
+            return JsonResponse(
+                {
+                    "error": (
+                        "Could not read editable content from this file. "
+                        "Use .docx, .html, or .txt; PDF/DOC can only be stored as source files."
+                    )
+                },
+                status=400,
+            )
+        return JsonResponse({"content": content})
+
+
+class TDSDocumentTemplateUpdateView(PermissionRequiredMixin, RoleRequiredMixin, UpdateView):
+    permission_required = "reports.change_tdsdocumenttemplate"
+    required_roles = ("Admin", "Manager")
+    model = TDSDocumentTemplate
+    form_class = TDSDocumentTemplateForm
+    template_name = "reports/tds/template_form.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Edit TDS Template"
+        return context
+
+    def get_success_url(self):
+        messages.success(self.request, "TDS template updated.")
+        return reverse("reports:tds_template_list")
+
+
+class TDSDocumentTemplateDeleteView(PermissionRequiredMixin, RoleRequiredMixin, DeleteView):
+    permission_required = "reports.delete_tdsdocumenttemplate"
+    required_roles = ("Admin", "Manager")
+    model = TDSDocumentTemplate
+    template_name = "reports/tds/template_confirm_delete.html"
+
+    def get_success_url(self):
+        messages.success(self.request, "TDS template deleted.")
+        return reverse("reports:tds_template_list")
+
+
+class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, TemplateView):
+    permission_required = "bookings.view_booking"
+    required_roles = ("Checked By", "Manager", "Incharge", "Analyst", "Admin")
+    template_name = "reports/tds/booking_document.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        booking = get_object_or_404(
+            Booking.objects.select_related(
+                "customer",
+                "submitter",
+                "manufacturer",
+                "sample_name",
+                "protocol",
+                "uom",
+            ).prefetch_related("test_to_be_performed__report_template"),
+            pk=self.kwargs["booking_pk"],
+        )
+        document_type = self.kwargs["document_type"]
+        valid_types = dict(TDSDocumentTemplate.DocumentType.choices)
+        if document_type not in valid_types:
+            raise Http404("Unknown TDS document type.")
+
+        selected_tests = list(booking.test_to_be_performed.select_related("report_template").order_by("name"))
+        if document_type == TDSDocumentTemplate.DocumentType.ADS:
+            template_qs = TDSDocumentTemplate.objects.filter(
+                document_type=document_type,
+                is_active=True,
+                test__in=selected_tests,
+            ).select_related("test").order_by("test__name", "name")
+        else:
+            template_qs = TDSDocumentTemplate.objects.filter(
+                document_type=document_type,
+                is_active=True,
+                test__isnull=True,
+            ).select_related("test").order_by("name")
+
+        rendered_templates = [
+            {
+                "template": template,
+                "test": template.test,
+                "content": mark_safe(_render_tds_content(template.content, booking, self.request)),
+            }
+            for template in template_qs
+        ]
+
+        fallback_ads_templates = []
+        if document_type == TDSDocumentTemplate.DocumentType.ADS:
+            matched_test_ids = {item["test"].pk for item in rendered_templates if item["test"]}
+            for test in selected_tests:
+                if test.pk in matched_test_ids:
+                    continue
+                report_template = getattr(test, "report_template", None)
+                if report_template and report_template.is_active and report_template.content.strip():
+                    fallback_ads_templates.append(
+                        {
+                            "template": report_template,
+                            "test": test,
+                            "content": mark_safe(_render_tds_content(report_template.content, booking, self.request)),
+                        }
+                    )
+
+        context.update(
+            {
+                "booking": booking,
+                "document_type": document_type,
+                "document_title": valid_types[document_type],
+                "selected_tests": selected_tests,
+                "rendered_templates": rendered_templates,
+                "fallback_ads_templates": fallback_ads_templates,
+                "print_mode": self.request.GET.get("print") == "1",
+            }
+        )
         return context
 
 
@@ -304,7 +575,7 @@ class COAEditView(PermissionRequiredMixin, RoleRequiredMixin, UpdateView):
             {
                 "id": template.pk,
                 "name": template.name,
-                "sample_name": template.sample_name.name if template.sample_name else "",
+                "sample_name": template.sample_name.display_name if template.sample_name else "",
                 "protocol": template.protocol.name if template.protocol else "",
             }
             for template in templates
@@ -329,7 +600,7 @@ class COAEditView(PermissionRequiredMixin, RoleRequiredMixin, UpdateView):
         context["old_report_options"] = [
             {
                 "id": report.pk,
-                "sample_name": report.booking.sample_name.name if report.booking.sample_name else "",
+                "sample_name": report.booking.sample_name.display_name if report.booking.sample_name else "",
                 "customer_name": report.booking.customer.name if report.booking.customer else "",
                 "batch_no": report.booking.batch_no or "",
                 "tracking_code": report.booking.tracking_code,
@@ -544,7 +815,7 @@ class ReportTemplateApiListView(PermissionRequiredMixin, RoleRequiredMixin, List
                         "name": template.name,
                         "description": template.description,
                         "content": template.content,
-                        "sample_name": template.sample_name.name if template.sample_name else None,
+                        "sample_name": template.sample_name.display_name if template.sample_name else None,
                         "protocol": template.protocol.name if template.protocol else None,
                         "created_at": timezone.localtime(template.created_at).isoformat() if timezone.is_aware(template.created_at) else template.created_at.isoformat(),
                     }

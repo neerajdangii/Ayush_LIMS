@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db import models
 from django.utils.html import escape
 
-from bookings.models import Booking, ProtocolMaster, SampleNameMaster
+from bookings.models import Booking, ProtocolMaster, SampleNameMaster, TestMaster
 from .template_library import build_tests_without_templates_table
 
 
@@ -53,6 +53,41 @@ class ReportTemplate(models.Model):
         super().save(*args, **kwargs)
         if self.is_default:
             self.__class__.objects.exclude(pk=self.pk).filter(is_default=True).update(is_default=False)
+
+
+class TDSDocumentTemplate(models.Model):
+    class DocumentType(models.TextChoices):
+        CS = "cs", "CS"
+        ADS = "ads", "ADS"
+        AC = "ac", "AC"
+        CHECKLIST = "checklist", "Checklist"
+        TRF = "trf", "TRF"
+        JOB_ORDER = "job_order", "Print Job Order"
+
+    document_type = models.CharField(max_length=20, choices=DocumentType.choices)
+    name = models.CharField(max_length=255)
+    test = models.ForeignKey(
+        TestMaster,
+        on_delete=models.SET_NULL,
+        related_name="tds_document_templates",
+        null=True,
+        blank=True,
+        help_text="Use this for ADS test-wise templates.",
+    )
+    description = models.CharField(max_length=255, blank=True)
+    content = models.TextField(blank=True)
+    source_file = models.FileField(upload_to="tds_templates/", null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["document_type", "test__name", "name"]
+        unique_together = ("document_type", "name", "test")
+
+    def __str__(self) -> str:
+        test_name = f" - {self.test.name}" if self.test_id else ""
+        return f"{self.get_document_type_display()}{test_name}: {self.name}"
 
 
 class Report(models.Model):

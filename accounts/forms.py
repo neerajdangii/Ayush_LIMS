@@ -23,6 +23,13 @@ def _master_permissions_queryset():
     )
 
 
+def _delete_booking_permission():
+    return Permission.objects.filter(
+        content_type__app_label="bookings",
+        codename="delete_booking",
+    ).first()
+
+
 class LoginForm(AuthenticationForm):
     username = forms.CharField(widget=forms.TextInput(attrs={"class": "form-control"}))
     password = forms.CharField(widget=forms.PasswordInput(attrs={"class": "form-control"}))
@@ -39,6 +46,7 @@ class AdminUserCreateForm(UserCreationForm):
     is_checked_by = forms.BooleanField(required=False, label="Checked By")
     is_person_incharge = forms.BooleanField(required=False, label="Person In-charge")
     can_edit_masters = forms.BooleanField(required=False, label="Master Edit Access")
+    can_delete_bookings = forms.BooleanField(required=False, label="Delete Booking Access")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -50,7 +58,7 @@ class AdminUserCreateForm(UserCreationForm):
     permissions = forms.ModelMultipleChoiceField(
         queryset=Permission.objects.filter(
             codename__in=[
-                'add_booking', 'change_booking', 'delete_booking', 'view_booking',
+                'add_booking', 'change_booking', 'view_booking',
                 'add_report', 'change_report', 'delete_report', 'view_report',
             ]
         ).order_by('content_type__app_label', 'codename'),
@@ -73,6 +81,7 @@ class AdminUserCreateForm(UserCreationForm):
             "is_checked_by",
             "is_person_incharge",
             "can_edit_masters",
+            "can_delete_bookings",
             "signature_file",
             "groups",
             "permissions",
@@ -87,6 +96,7 @@ class AdminUserCreateForm(UserCreationForm):
         self.fields["is_checked_by"].widget.attrs["class"] = "form-check-input"
         self.fields["is_person_incharge"].widget.attrs["class"] = "form-check-input"
         self.fields["can_edit_masters"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_delete_bookings"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -98,6 +108,7 @@ class AdminUserCreateForm(UserCreationForm):
         checked_by = bool(self.cleaned_data.get("is_checked_by"))
         person_incharge = bool(self.cleaned_data.get("is_person_incharge"))
         can_edit_masters = bool(self.cleaned_data.get("can_edit_masters"))
+        can_delete_bookings = bool(self.cleaned_data.get("can_delete_bookings"))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
         if commit:
             user.save()
@@ -105,6 +116,10 @@ class AdminUserCreateForm(UserCreationForm):
             selected_permissions = list(self.cleaned_data.get("permissions") or [])
             if can_edit_masters:
                 selected_permissions.extend(list(_master_permissions_queryset()))
+            if can_delete_bookings:
+                delete_booking_permission = _delete_booking_permission()
+                if delete_booking_permission:
+                    selected_permissions.append(delete_booking_permission)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
             if user.is_staff:
@@ -132,6 +147,7 @@ class AdminUserUpdateForm(forms.ModelForm):
     is_checked_by = forms.BooleanField(required=False, label="Checked By")
     is_person_incharge = forms.BooleanField(required=False, label="Person In-charge")
     can_edit_masters = forms.BooleanField(required=False, label="Master Edit Access")
+    can_delete_bookings = forms.BooleanField(required=False, label="Delete Booking Access")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -143,7 +159,7 @@ class AdminUserUpdateForm(forms.ModelForm):
     permissions = forms.ModelMultipleChoiceField(
         queryset=Permission.objects.filter(
             codename__in=[
-                'add_booking', 'change_booking', 'delete_booking', 'view_booking',
+                'add_booking', 'change_booking', 'view_booking',
                 'add_report', 'change_report', 'delete_report', 'view_report',
             ]
         ).order_by('content_type__app_label', 'codename'),
@@ -165,6 +181,7 @@ class AdminUserUpdateForm(forms.ModelForm):
             "is_checked_by",
             "is_person_incharge",
             "can_edit_masters",
+            "can_delete_bookings",
             "signature_file",
             "groups",
             "permissions",
@@ -181,6 +198,7 @@ class AdminUserUpdateForm(forms.ModelForm):
         self.fields["is_checked_by"].widget.attrs["class"] = "form-check-input"
         self.fields["is_person_incharge"].widget.attrs["class"] = "form-check-input"
         self.fields["can_edit_masters"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_delete_bookings"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -193,6 +211,10 @@ class AdminUserUpdateForm(forms.ModelForm):
             self.fields["can_edit_masters"].initial = self.instance.user_permissions.filter(
                 codename__in=MASTER_PERMISSION_CODENAMES
             ).exists()
+            self.fields["can_delete_bookings"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="bookings",
+                codename="delete_booking",
+            ).exists()
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -203,6 +225,7 @@ class AdminUserUpdateForm(forms.ModelForm):
         checked_by = bool(self.cleaned_data.get("is_checked_by"))
         person_incharge = bool(self.cleaned_data.get("is_person_incharge"))
         can_edit_masters = bool(self.cleaned_data.get("can_edit_masters"))
+        can_delete_bookings = bool(self.cleaned_data.get("can_delete_bookings"))
         user.is_active = bool(self.cleaned_data.get("is_active", True))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
 
@@ -238,6 +261,10 @@ class AdminUserUpdateForm(forms.ModelForm):
             selected_permissions = list(self.cleaned_data.get("permissions") or [])
             if can_edit_masters:
                 selected_permissions.extend(list(_master_permissions_queryset()))
+            if can_delete_bookings:
+                delete_booking_permission = _delete_booking_permission()
+                if delete_booking_permission:
+                    selected_permissions.append(delete_booking_permission)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
 
