@@ -3,7 +3,7 @@
 {% block title %}{{ page_title }} | LIMS{% endblock %}
 {% block extra_head %}
 <script>
-  const arlStaticPrefix = "{% static '' %}";
+  const arlStaticPrefix = "/static/";
   window.tinyMCEPreInit = {
     base: `${arlStaticPrefix}js/tinymce`,
     baseURL: `${arlStaticPrefix}js/tinymce`,
