@@ -242,11 +242,11 @@
             <input type="text" id="inlineMasterName" class="form-control" maxlength="255">
           </div>
           <div class="col-md-4 d-none" id="inlineSampleGenericWrap">
-            <label class="form-label" for="inlineSampleGenericName">Generic Name <span class="required-mark">*</span></label>
+            <label class="form-label" for="inlineSampleGenericName">Generic Name</label>
             <input type="text" id="inlineSampleGenericName" class="form-control" maxlength="255">
           </div>
           <div class="col-md-4 d-none" id="inlineSampleTypeWrap">
-            <label class="form-label" for="inlineSampleType">Sample Type <span class="required-mark">*</span></label>
+            <label class="form-label" for="inlineSampleType">Sample Type</label>
             <select id="inlineSampleType" class="form-select">
               <option value="">--- Select Sample Type ---</option>
               <option value="API">API</option>
@@ -1385,19 +1385,6 @@ document.addEventListener('DOMContentLoaded', function () {
       errorBox.classList.remove('d-none');
       return;
     }
-    if (current.slug === 'sample-name') {
-      if (!sampleInlineFields.genericName.value.trim()) {
-        errorBox.textContent = 'Generic Name is required.';
-        errorBox.classList.remove('d-none');
-        return;
-      }
-      if (!sampleInlineFields.sampleType.value) {
-        errorBox.textContent = 'Sample Type is required.';
-        errorBox.classList.remove('d-none');
-        return;
-      }
-    }
-
     const target = document.getElementById(current.targetId);
     if (!target) {
       return;

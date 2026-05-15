@@ -145,15 +145,170 @@ def _booking_template_context(booking, request):
     }
 
 
-def _render_tds_content(content, booking, request):
+def _render_tds_content(content, booking, request, document_type=None):
     if not content:
         return ""
     template = engines["django"].from_string(content)
     rendered_content = template.render(_booking_template_context(booking, request))
     rendered_content = _strip_tds_trailing_empty_blocks(rendered_content)
     rendered_content = _unwrap_tds_outer_table(rendered_content)
-    rendered_content = _fill_tds_booking_labels(rendered_content, booking)
+    if document_type == TDSDocumentTemplate.DocumentType.JOB_ORDER:
+        rendered_content = _fill_tds_job_order(rendered_content, booking)
+    elif document_type == TDSDocumentTemplate.DocumentType.AC:
+        rendered_content = _fill_tds_ac(rendered_content, booking)
+    else:
+        rendered_content = _fill_tds_booking_labels(rendered_content, booking)
     return _strip_tds_trailing_empty_blocks(rendered_content)
+
+
+def _fill_tds_job_order(content, booking):
+    sample = booking.sample_name if booking.sample_name_id else None
+    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
+    values = {
+        "Sample Name": sample.display_name if sample else "",
+        "Sample Quantity": sample_qty,
+        "Storage Condition": booking.sample_condition,
+        "Sampling Location": booking.sample_location,
+        "Sample Collected by": booking.collected_by_name,
+        "Report No": booking.sample_reg_no,
+        "ULR No.": "N.A",
+        "Sample Receipt Date": _format_report_date(booking.sample_receipt_date),
+        "Analysis started on": _format_report_date(booking.analysis_start_date),
+        "Analysis completed on": _format_report_date(booking.analysis_end_date),
+    }
+
+    for label, value in values.items():
+        content = _fill_next_empty_tds_cell(content, label, value)
+
+    if sample:
+        content = _fill_inline_tds_label(content, "Discipline:", sample.discipline)
+        content = _fill_inline_tds_label(content, "Group:", sample.test_group)
+        content = _fill_inline_tds_label(content, "Sample Description:", sample.description)
+
+    return _fill_tds_job_order_tests(content, booking)
+
+
+def _fill_tds_ac(content, booking):
+    sample = booking.sample_name if booking.sample_name_id else None
+    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
+    values = {
+        "Sample Name": sample.display_name if sample else "",
+        "Page": "1",
+        "Report Number": booking.sample_reg_no,
+        "Sample Number": booking.batch_no,
+        "Sample Received On": _format_report_date(booking.sample_receipt_date),
+        "Mfg. Date": _format_report_date(booking.manufacture_date, month_year_only=True),
+        "Exp. date": _format_report_date(booking.expiry_retest_date, month_year_only=True),
+        "Job Allocation to Lab": booking.sample_location,
+        "Date of Testing": _format_report_date(booking.analysis_start_date),
+        "Job Allocated To": booking.sample_location,
+        "Sample Quantity": sample_qty,
+        "Customer Ref.": booking.customer_sr_no,
+        "Sample Condition": booking.sample_condition,
+        "Product Name": sample.display_name if sample else "",
+        "Batch No./Condition": " - ".join(part for part in [booking.batch_no, booking.sample_condition] if part),
+    }
+
+    for label, value in values.items():
+        content = _fill_inline_tds_label(content, f"{label} :", value)
+        content = _fill_inline_tds_label(content, f"{label}:", value)
+    return content
+
+
+def _fill_next_empty_tds_cell(content, label, value):
+    if not value:
+        return content
+
+    empty_cell = r"<td\b(?P<value_attrs>[^>]*)>(?:\s|&nbsp;|&#160;|<br\s*/?>)*</td>"
+    pattern = (
+        rf"(?P<label_cell><td\b[^>]*>.*?{re.escape(label)}.*?</td>)"
+        rf"\s*{empty_cell}"
+    )
+
+    def replace(match):
+        attrs = match.group("value_attrs") or ""
+        return f'{match.group("label_cell")}<td{attrs}>{escape(value)}</td>'
+
+    return re.sub(pattern, replace, content, count=1, flags=re.IGNORECASE | re.DOTALL)
+
+
+def _fill_inline_tds_label(content, label, value):
+    if not value:
+        return content
+    pattern = rf"({re.escape(label)}(?:\s|&nbsp;|&#160;)*)"
+    return re.sub(pattern, lambda match: f"{match.group(1)}{escape(value)} ", content, count=1, flags=re.IGNORECASE)
+
+
+def _fill_tds_job_order_tests(content, booking):
+    tests = list(booking.test_to_be_performed.order_by("name"))
+    if not tests:
+        return content
+
+    table_re = re.compile(r"<table\b[^>]*>.*?</table>", flags=re.IGNORECASE | re.DOTALL)
+    row_re = re.compile(r"<tr\b[^>]*>.*?</tr>", flags=re.IGNORECASE | re.DOTALL)
+    replaced_table = False
+
+    def has_meaningful_text(html):
+        text = re.sub(r"<[^>]+>", " ", html)
+        text = text.replace("&nbsp;", " ").replace("&#160;", " ")
+        return bool(re.sub(r"\s+", " ", text).strip())
+
+    def build_rows(template_row):
+        cells = re.findall(r"<td\b(?P<attrs>[^>]*)>.*?</td>", template_row, flags=re.IGNORECASE | re.DOTALL)
+        attrs = [cell_attrs for cell_attrs in cells[:4]]
+        while len(attrs) < 4:
+            attrs.append("")
+
+        rows = []
+        for index, test in enumerate(tests, start=1):
+            rows.append(
+                "<tr>"
+                f"<td{attrs[0]} style=\"text-align: center;\">{index}</td>"
+                f"<td{attrs[1]}>{escape(test.name)}</td>"
+                f"<td{attrs[2]}></td>"
+                f"<td{attrs[3]}></td>"
+                "</tr>"
+            )
+        return "".join(rows)
+
+    def replace_table(match):
+        nonlocal replaced_table
+        table_html = match.group(0)
+        if replaced_table:
+            return table_html
+        if not re.search(r"Sr\.\s*No\.|Test\s*Parameter", table_html, flags=re.IGNORECASE):
+            return table_html
+
+        rows = list(row_re.finditer(table_html))
+        if not rows:
+            return table_html
+
+        header_index = next(
+            (
+                index
+                for index, row in enumerate(rows)
+                if re.search(r"Sr\.\s*No\.|Test\s*Parameter", row.group(0), flags=re.IGNORECASE)
+            ),
+            None,
+        )
+        if header_index is None:
+            return table_html
+
+        insert_after = rows[header_index]
+        body_rows_start = insert_after.end()
+        body_rows_end = body_rows_start
+        template_row = rows[header_index + 1].group(0) if header_index + 1 < len(rows) else "<tr><td></td><td></td><td></td><td></td></tr>"
+
+        for row in rows[header_index + 1:]:
+            row_html = row.group(0)
+            if has_meaningful_text(row_html):
+                break
+            body_rows_end = row.end()
+
+        replaced_table = True
+        return table_html[:body_rows_start] + build_rows(template_row) + table_html[body_rows_end:]
+
+    return table_re.sub(replace_table, content)
 
 
 def _unwrap_tds_outer_table(content):
@@ -238,12 +393,8 @@ class ReportListView(PermissionRequiredMixin, RoleRequiredMixin, ListView):
 
         if status_filter == Report.FinalOutcome.PASS:
             qs = qs.filter(final_outcome=Report.FinalOutcome.PASS)
-        elif status_filter == Report.Status.DRAFT:
-            qs = qs.filter(status=Report.Status.DRAFT)
-        elif status_filter == "approved":
-            qs = qs.filter(status__in=[Report.Status.MANAGER_APPROVED, Report.Status.INCHARGE_APPROVED])
-        elif status_filter == "pending":
-            qs = qs.exclude(final_outcome=Report.FinalOutcome.PASS)
+        elif status_filter == Report.FinalOutcome.DRAFT:
+            qs = qs.filter(final_outcome=Report.FinalOutcome.DRAFT)
 
         if customer_filter:
             qs = qs.filter(booking__customer_id=customer_filter)
@@ -420,7 +571,7 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
             {
                 "template": template,
                 "test": template.test,
-                "content": mark_safe(_render_tds_content(template.content, booking, self.request)),
+                "content": mark_safe(_render_tds_content(template.content, booking, self.request, document_type)),
             }
             for template in template_qs
         ]
@@ -437,7 +588,7 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
                         {
                             "template": report_template,
                             "test": test,
-                            "content": mark_safe(_render_tds_content(report_template.content, booking, self.request)),
+                            "content": mark_safe(_render_tds_content(report_template.content, booking, self.request, document_type)),
                         }
                     )
 
@@ -466,7 +617,7 @@ class ReportCreateOrUpdateView(PermissionRequiredMixin, RoleRequiredMixin, Updat
     def get_object(self, queryset=None):
         booking = get_object_or_404(Booking, pk=self.kwargs["booking_pk"])
         if booking.status != Booking.Status.APPROVED:
-            raise Http404("Only approved bookings can generate report workflow.")
+            booking.approve(self.request.user)
         report, _ = Report.objects.get_or_create(booking=booking, defaults={"created_by": self.request.user})
         return report
 

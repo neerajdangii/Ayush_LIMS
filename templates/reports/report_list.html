@@ -33,8 +33,6 @@
         <select name="status" class="form-select">
           <option value="">All Status</option>
           <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
-          <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
-          <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
           <option value="pass" {% if status_filter == 'pass' %}selected{% endif %}>Pass</option>
         </select>
       </div>
@@ -86,12 +84,9 @@
           <td>
             {% if r.final_outcome == 'pass' %}
             <span class="badge text-bg-success">Pass</span>
-            {% elif r.status == 'manager_approved' or r.status == 'incharge_approved' %}
-            <span class="badge text-bg-primary">Approved</span>
             {% else %}
             <span class="badge text-bg-secondary">Draft</span>
             {% endif %}
-            <div class="text-muted small">{{ r.get_status_display }}</div>
           </td>
           <td>{{ r.updated_by_display }}</td>
           <td>

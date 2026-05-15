@@ -30,7 +30,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "python manage.py migrate &&
+      sh -c "python manage.py migrate --noinput &&
       python manage.py collectstatic --noinput &&
       gunicorn lab_management_system.wsgi:application --bind 0.0.0.0:8000 --workers 3"
     ports:

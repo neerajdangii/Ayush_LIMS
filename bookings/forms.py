@@ -349,8 +349,8 @@ class SampleNameMasterForm(MasterForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["generic_name"].required = True
-        self.fields["sample_type"].required = True
+        self.fields["generic_name"].required = False
+        self.fields["sample_type"].required = False
         self.fields["sample_type"].choices = [("", "--- Select Sample Type ---")] + list(
             SampleNameMaster.SampleType.choices
         )

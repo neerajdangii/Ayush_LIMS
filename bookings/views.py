@@ -213,8 +213,12 @@ class BookingListView(LoginRequiredMixin, ListView):
 
         if status_filter == Booking.Status.PENDING:
             qs = qs.filter(status=Booking.Status.PENDING)
+        elif status_filter == "assigned":
+            qs = qs.filter(status=Booking.Status.APPROVED).filter(
+                Q(report__isnull=True) | Q(report__status=Report.Status.DRAFT)
+            )
         elif status_filter == Booking.Status.APPROVED:
-            qs = qs.filter(status=Booking.Status.APPROVED)
+            qs = qs.filter(report__status__in=[Report.Status.MANAGER_APPROVED, Report.Status.INCHARGE_APPROVED])
 
         if customer_filter:
             qs = qs.filter(customer_id=customer_filter)
@@ -462,16 +466,34 @@ class InlineMasterCreateView(RoleRequiredMixin, View):
                     "limits": request.POST.get("limits", "").strip(),
                 }
             )
-            if not defaults["generic_name"]:
-                return JsonResponse({"error": "Generic Name is required."}, status=400)
-            if defaults["sample_type"] not in dict(SampleNameMaster.SampleType.choices):
-                return JsonResponse({"error": "Sample Type is required."}, status=400)
+            if defaults["sample_type"] and defaults["sample_type"] not in dict(SampleNameMaster.SampleType.choices):
+                return JsonResponse({"error": "Invalid Sample Type."}, status=400)
             if defaults["discipline"] and defaults["discipline"] not in dict(SampleNameMaster.Discipline.choices):
                 return JsonResponse({"error": "Invalid Discipline."}, status=400)
             if defaults["test_group"] and defaults["test_group"] not in dict(SampleNameMaster.TestGroup.choices):
                 return JsonResponse({"error": "Invalid Test Group."}, status=400)
 
         obj, created = conf["model"].objects.get_or_create(name=name, defaults=defaults)
+        if slug == "sample-name":
+            update_fields = []
+            for field in (
+                "generic_name",
+                "sample_type",
+                "discipline",
+                "test_group",
+                "method",
+                "rate",
+                "observationsheet_prefix",
+                "customer",
+                "description",
+                "limits",
+            ):
+                value = defaults.get(field, "")
+                if value and getattr(obj, field, "") != value:
+                    setattr(obj, field, value)
+                    update_fields.append(field)
+            if update_fields:
+                obj.save(update_fields=update_fields)
         if not obj.is_active:
             obj.is_active = True
             obj.save(update_fields=["is_active"])
@@ -479,7 +501,8 @@ class InlineMasterCreateView(RoleRequiredMixin, View):
         return JsonResponse(
             {
                 "id": obj.pk,
-                "name": obj.name,
+                "name": getattr(obj, "display_name", obj.name),
+                "raw_name": obj.name,
                 "address": getattr(obj, "address", ""),
                 "generic_name": getattr(obj, "generic_name", ""),
                 "discipline": getattr(obj, "discipline", ""),

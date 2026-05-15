@@ -62,11 +62,11 @@
           <div>
             <h5 class="mb-1">#{{ booking.tracking_code }} ~ {{ booking.sample_name.display_name|default:"N.A" }} ~ {{ booking.sample_reg_no|default:"N.A" }}</h5>
             {% if booking.is_reported %}
-            <span class="badge text-bg-primary" id="bookingStatusBadge">Reported</span>
+            <span class="badge text-bg-success" id="bookingStatusBadge">Approved</span>
             {% elif booking.status == 'approved' %}
-            <span class="badge text-bg-success" id="bookingStatusBadge">Assigned</span>
+            <span class="badge text-bg-primary" id="bookingStatusBadge">Assigned</span>
             {% else %}
-            <span class="badge text-bg-warning" id="bookingStatusBadge">Sample Received</span>
+            <span class="badge text-bg-warning" id="bookingStatusBadge">Pending</span>
             {% endif %}
           </div>
           <div class="d-flex flex-wrap gap-2">
@@ -244,7 +244,7 @@
       reportLink.classList.remove('d-none');
       if (statusBadge) {
         statusBadge.classList.remove('text-bg-warning');
-        statusBadge.classList.add('text-bg-success');
+        statusBadge.classList.add('text-bg-primary');
         statusBadge.textContent = 'Assigned';
       }
     });

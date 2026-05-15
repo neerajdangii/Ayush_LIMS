@@ -25,6 +25,7 @@
         <select name="status" class="form-select">
           <option value="">All Status</option>
           <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+          <option value="assigned" {% if status_filter == 'assigned' %}selected{% endif %}>Assigned</option>
           <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
         </select>
       </div>
@@ -84,11 +85,11 @@
             <td>{{ b.get_booking_type_display }}</td>
             <td>
               {% if b.is_reported %}
-              <span class="badge text-bg-primary">Reported</span>
+              <span class="badge text-bg-success">Approved</span>
               {% elif b.status == 'approved' %}
-              <span class="badge text-bg-success">Assigned</span>
+              <span class="badge text-bg-primary">Assigned</span>
               {% else %}
-              <span class="badge text-bg-warning">Sample Received</span>
+              <span class="badge text-bg-warning">Pending</span>
               {% endif %}
               <div class="text-muted small">Changed by: {{ b.updated_by_display }}</div>
             </td>
@@ -101,17 +102,8 @@
               {% if perms.bookings.delete_booking %}
               <a class="btn btn-sm btn-outline-danger" href="{% url 'bookings:delete' b.pk %}">Delete</a>
               {% endif %}
-              {% if b.status == 'approved' %}
-                {% if user|has_role:"Checked By" %}
-                <a class="btn btn-sm btn-primary" href="{% url 'reports:approval' b.pk %}">Report</a>
-                {% endif %}
-              {% else %}
-                {% if user|has_role:"Checked By" %}
-              <form method="post" action="{% url 'bookings:approve' b.pk %}" class="d-inline">
-                {% csrf_token %}
-                <button class="btn btn-sm btn-success" type="submit">Approve</button>
-              </form>
-                {% endif %}
+              {% if user|has_role:"Checked By" %}
+              <a class="btn btn-sm btn-primary" href="{% url 'reports:approval' b.pk %}">Report</a>
               {% endif %}
             </td>
           </tr>

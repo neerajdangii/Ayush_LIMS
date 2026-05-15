@@ -141,6 +141,31 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = env_bool('DJANGO_CSRF_COOKIE_SECURE', 'True')
     SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', 'True')
 
+SECURE_CROSS_ORIGIN_OPENER_POLICY = (
+    os.getenv(
+        'DJANGO_SECURE_CROSS_ORIGIN_OPENER_POLICY',
+        'same-origin' if SECURE_SSL_REDIRECT else '',
+    ).strip()
+    or None
+)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGIN_URL = 'accounts:login'

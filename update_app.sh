@@ -36,7 +36,13 @@ $COMPOSE_CMD up -d --build
 echo "Container status:"
 $COMPOSE_CMD ps
 
+echo "Django deployment check:"
+$COMPOSE_CMD exec -T web python manage.py check --deploy || true
+
+echo "TDS migration status:"
+$COMPOSE_CMD exec -T web python manage.py showmigrations reports | grep 0009_tdsdocumenttemplate || true
+
 echo "Recent web logs:"
-$COMPOSE_CMD logs --tail=50 web
+$COMPOSE_CMD logs --tail=100 web
 
 echo "Manual update complete."
