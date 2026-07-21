@@ -39,6 +39,7 @@
             <th>Document</th>
             <th>Name</th>
             <th>Test</th>
+            <th>Display</th>
             <th>Source File</th>
             <th>Status</th>
             <th>Action</th>
@@ -55,9 +56,14 @@
               {% endif %}
             </td>
             <td>{{ template.test.name|default:"-" }}</td>
+            <td>{{ template.get_display_mode_display }}</td>
             <td>
               {% if template.source_file %}
               <a href="{{ template.source_file.url }}" target="_blank" rel="noopener">Open file</a>
+              {% if template.source_preview_file %}
+              <span class="text-muted">/</span>
+              <a href="{{ template.source_preview_file.url }}" target="_blank" rel="noopener">Preview PDF</a>
+              {% endif %}
               {% else %}
               -
               {% endif %}
@@ -79,7 +85,7 @@
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="6" class="text-center text-muted">No TDS templates added yet.</td></tr>
+          <tr><td colspan="7" class="text-center text-muted">No TDS templates added yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

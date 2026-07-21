@@ -77,6 +77,26 @@
         window.location.reload();
       });
     }
+
+    const pageSavePopup = document.querySelector('.page-save-popup');
+    if (pageSavePopup) {
+      try {
+        const currentUrl = new URL(window.location.href);
+        if (currentUrl.searchParams.has('saved') || currentUrl.searchParams.has('booking_id')) {
+          currentUrl.searchParams.delete('saved');
+          currentUrl.searchParams.delete('booking_id');
+          window.history.replaceState(window.history.state, document.title, currentUrl.pathname + currentUrl.search + currentUrl.hash);
+        }
+      } catch (error) {
+        // Ignore URL cleanup failures; the popup can still behave normally.
+      }
+
+      const hidePageSavePopup = () => {
+        pageSavePopup.classList.add('is-hidden');
+      };
+      document.addEventListener('pointerdown', hidePageSavePopup, { once: true });
+      document.addEventListener('keydown', hidePageSavePopup, { once: true });
+    }
   </script>
   {% block extra_js %}{% endblock %}
 </body>

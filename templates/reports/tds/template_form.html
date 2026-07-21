@@ -46,25 +46,33 @@
         <label for="{{ form.test.id_for_label }}">Test link for ADS</label>
         {{ form.test }}
         {{ form.test.errors }}
+        <div class="text-muted small mt-1">For ADS, leave Test blank only when this template is common for ADS.</div>
       </div>
       <div class="col-12">
         <label for="{{ form.description.id_for_label }}">Description</label>
         {{ form.description }}
         {{ form.description.errors }}
       </div>
+      <div class="col-md-4">
+        <label for="{{ form.display_mode.id_for_label }}">Display Option</label>
+        {{ form.display_mode }}
+        {{ form.display_mode.errors }}
+        <div class="text-muted small mt-1">Use editable content when you want to change text here. Use uploaded file to keep the Word/PDF layout for booking TDS.</div>
+      </div>
       <div class="col-12">
         <label for="{{ form.source_file.id_for_label }}">Word/PDF Source File</label>
         {{ form.source_file }}
         {{ form.source_file.errors }}
-        <div class="text-muted small mt-1" id="source-file-help">Upload a DOCX/HTML/TXT file to auto-fill Printable Content. PDF/DOC can be stored as source files, but paste printable content manually.</div>
+        <div class="text-muted small mt-1" id="source-file-help">Editable mode imports DOCX/HTML/TXT into the editor. Uploaded-file mode converts Word to PDF for display without changing the editor content.</div>
       </div>
-      <div class="col-12">
+      <div class="col-12" id="tds-content-field">
         <label for="{{ form.content.id_for_label }}">Printable Content</label>
         {{ form.content }}
         {{ form.content.errors }}
         <div class="text-muted small mt-1">
-          {% verbatim %}You can use booking placeholders such as {{ sample_name }}, {{ sample_number }}, {{ batch_no }}, {{ sample_reg_no }}, {{ customer_name }}, {{ sample_receipt_date }}.{% endverbatim %}
+          {% verbatim %}You can use booking placeholders such as {{ sample_name }}, {{ sample_number }}, {{ batch_no }}, {{ sample_reg_no }}, {{ customer_name }}, {{ sample_receipt_date }}. Use [[page_break]] where this master should continue on the next numbered page.{% endverbatim %}
         </div>
+      </div>
       </div>
       <div class="col-12">
         <div class="form-check">
@@ -105,7 +113,7 @@
         table_default_attributes: { border: '1', style: 'border-collapse:collapse;width:100%;' },
         plugins: 'lists table link code advlist charmap searchreplace wordcount preview visualblocks',
         toolbar_sticky: true,
-        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | table | removeformat code preview',
+        toolbar: 'undo redo | blocks fontfamily fontsize lineheight | bold italic underline | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | table | removeformat code preview',
         font_family_formats: 'Calibri=calibri,arial,sans-serif;Arial=arial,helvetica,sans-serif;Times New Roman=times new roman,times,serif;Courier New=courier new,courier,monospace',
         license_key: 'gpl'
       };
@@ -151,12 +159,17 @@
 
     function initSourceFileImport() {
       const input = document.getElementById('{{ form.source_file.id_for_label }}');
+      const displayMode = document.getElementById('{{ form.display_mode.id_for_label }}');
       if (!input) {
         return;
       }
       input.addEventListener('change', function () {
         const file = input.files && input.files[0];
         if (!file) {
+          return;
+        }
+        if (displayMode && displayMode.value === 'source_file') {
+          showUploadStatus('File selected for direct booking TDS display. Save the template to use it.', false);
           return;
         }
 
@@ -193,6 +206,27 @@
       });
     }
 
+    function initDisplayModeToggle() {
+      const displayMode = document.getElementById('{{ form.display_mode.id_for_label }}');
+      const contentField = document.getElementById('tds-content-field');
+      if (!displayMode || !contentField) {
+        return;
+      }
+      function updateModeHelp() {
+        const sourceMode = displayMode.value === 'source_file';
+        showUploadStatus(
+          sourceMode
+            ? 'Upload a Word/PDF file and save.'
+            : 'Upload DOCX/HTML/TXT to import editable content, then review spacing and save.',
+          false
+        );
+      }
+      displayMode.addEventListener('change', updateModeHelp);
+      updateModeHelp();
+    }
+
+    
+
     function initEditor() {
       const target = document.querySelector('textarea[data-editor="tinymce"]');
       if (!target) {
@@ -218,6 +252,7 @@
       if (saveButton) {
         saveButton.addEventListener('click', syncEditor);
       }
+      initDisplayModeToggle();
       initSourceFileImport();
     }
 

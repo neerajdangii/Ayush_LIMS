@@ -83,7 +83,7 @@
           </div>
           <div class="booking-col">
             <label class="form-label">Sample Reg No.</label>
-            <input type="text" class="form-control" value="{{ form.instance.sample_reg_no|default:'Auto After Save' }}" readonly>
+            <input type="text" class="form-control" value="{{ form.instance.sample_registration_no|default:'Auto After Save' }}" readonly>
           </div>
         </div>
 
@@ -237,7 +237,7 @@
       </div>
       <div class="modal-body">
         <div class="row g-3">
-          <div class="col-md-4 inline-master-sample-field">
+          <div class="col-12 col-md-4 inline-master-sample-field" id="inlineMasterNameWrap">
             <label class="form-label" for="inlineMasterName">Name <span class="required-mark">*</span></label>
             <input type="text" id="inlineMasterName" class="form-control" maxlength="255">
           </div>
@@ -321,6 +321,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const modalElement = document.getElementById('inlineMasterModal');
   const modal = window.bootstrap && modalElement ? new window.bootstrap.Modal(modalElement) : null;
   const modalDialog = document.getElementById('inlineMasterDialog');
+  const nameWrap = document.getElementById('inlineMasterNameWrap');
   const nameInput = document.getElementById('inlineMasterName');
   const addressInput = document.getElementById('inlineMasterAddress');
   const addressWrap = document.getElementById('inlineMasterAddressWrap');
@@ -1359,6 +1360,10 @@ document.addEventListener('DOMContentLoaded', function () {
       if (modalDialog) {
         modalDialog.classList.toggle('modal-xl', isSampleMaster);
       }
+      if (nameWrap) {
+        nameWrap.classList.toggle('col-md-4', isSampleMaster);
+        nameWrap.classList.toggle('col-md-12', !isSampleMaster);
+      }
       if (isSampleMaster && sampleInlineFields.discipline && sampleInlineFields.testGroup) {
         sampleInlineFields.discipline.value = 'Pharma';
         sampleInlineFields.testGroup.value = 'Chemical/Instrument Section';
@@ -1516,8 +1521,9 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // Auto-populate form from previous booking with same sample & customer
+  // Skip this when duplicating a booking so the duplicate source values remain intact.
   async function loadPreviousBookingData() {
-    if (!isDuplicateMode) {
+    if (isDuplicateMode) {
       return;
     }
 

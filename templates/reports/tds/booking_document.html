@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tds_filters %}
 {% block title %}{{ document_title }} | Booking {{ booking.tracking_code }}{% endblock %}
 {% block extra_head %}
 <style>
@@ -23,10 +24,10 @@
       box-sizing: border-box;
     }
     .tds-print-sheet {
-      width: min(210mm, calc(100% - 16mm));
-      min-height: 297mm;
+      width: min({% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}216mm{% else %}210mm{% endif %}, calc(100% - 16mm));
+      min-height: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}279mm{% else %}297mm{% endif %};
       margin: 0 auto !important;
-      padding: 8mm !important;
+      padding: {% if document_type == 'ac' %}1.5mm 6.5mm 7mm{% elif document_type == 'job_order' %}13mm 8mm 9mm{% elif document_type == 'checklist' %}1.5mm 6.5mm 7mm{% else %}5mm 7mm{% endif %} !important;
       box-sizing: border-box;
     }
     .tds-print-sheet,
@@ -40,18 +41,93 @@
       margin: 0 !important;
       padding: 0 !important;
     }
+    {% if document_type == 'ac' %}
+    .tds-template-content {
+      zoom: 0.8;
+    }
+    @supports not (zoom: 1) {
+      .tds-template-content {
+        transform: scale(0.8);
+        transform-origin: top center;
+        width: 125% !important;
+      }
+    }
+    .tds-template-content .tds-ac-document {
+      margin: 0 auto !important;
+      width: 100% !important;
+    }
+    {% endif %}
+    {% if document_type == 'job_order' %}
+    .tds-template-content {
+      min-height: 257mm;
+      position: relative;
+    }
+    .tds-template-content .tds-job-sign-table {
+      bottom: 22mm;
+      left: 0;
+      margin: 0 !important;
+      position: absolute;
+      right: 0;
+      width: 100% !important;
+    }
+    .tds-template-content .tds-job-sign-table td {
+      height: 16mm;
+      vertical-align: bottom !important;
+    }
+    .tds-template-content .tds-job-sign-table,
+    .tds-template-content .tds-job-sign-table td,
+    .tds-template-content .tds-job-sign-table th,
+    .tds-template-content .tds-job-footer-table,
+    .tds-template-content .tds-job-footer-table td,
+    .tds-template-content .tds-job-footer-table th {
+      border: 0 !important;
+    }
+    .tds-template-content .tds-job-footer-table {
+      bottom: 8mm;
+      left: 0;
+      margin: 0 !important;
+      position: absolute;
+      right: 0;
+      text-align: center;
+      width: 100% !important;
+    }
+    .tds-template-content .tds-job-page-marker {
+      bottom: 8mm;
+      font-weight: 700;
+      left: 0;
+      margin: 0 !important;
+      position: absolute;
+      right: 0;
+      text-align: center;
+    }
+    {% endif %}
+    {% if document_type == 'checklist' %}
+    .tds-template-content {
+      zoom: 0.8;
+    }
+    @supports not (zoom: 1) {
+      .tds-template-content {
+        transform: scale(0.8);
+        transform-origin: top center;
+        width: 125% !important;
+      }
+    }
+    {% endif %}
   }
   {% endif %}
   .tds-template-content {
     color: #000;
     font-family: "Times New Roman", Times, serif;
-    font-size: 14px;
+    font-size: 12px;
+    line-height: 1.2;
   }
+  .tds-template-content p { margin: 0 0 3px; }
   .tds-template-content > :last-child { margin-bottom: 0 !important; }
   .tds-template-content p:empty { display: none !important; }
   .tds-template-content table {
     width: 100%;
     border-collapse: collapse !important;
+    table-layout: fixed;
   }
   .tds-template-content table,
   .tds-template-content th,
@@ -61,13 +137,553 @@
   }
   .tds-template-content th,
   .tds-template-content td {
-    padding: 2px 4px;
+    padding: 2px 3px;
     vertical-align: top;
   }
+  .tds-source-frame {
+    width: 100%;
+    min-height: 280mm;
+    border: 0;
+    display: block;
+  }
+  .tds-template-edit-link {
+    display: inline-flex;
+    margin-bottom: 8px;
+  }
+  .tds-ads-print-page {
+    background: #fff;
+    box-sizing: border-box;
+    color: #000;
+    font-family: "Times New Roman", Times, serif;
+    min-height: 279mm;
+    padding: 36mm 7mm 58mm;
+    position: relative;
+  }
+  .tds-ads-print-page + .tds-ads-print-page {
+    margin-top: 8mm;
+  }
+  .tds-ads-page-header,
+  .tds-ads-page-footer {
+    left: 7mm;
+    overflow: hidden;
+    position: absolute;
+    right: 7mm;
+  }
+  .tds-ads-page-header {
+    max-height: 31mm;
+    top: 5mm;
+  }
+  .tds-ads-page-footer {
+    bottom: 5mm;
+    max-height: 52mm;
+  }
+  .tds-ads-page-number {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 2mm;
+    text-align: center;
+  }
+  {% if document_type == 'checklist' %}
+  .tds-template-content {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 16px;
+    line-height: 1.15;
+  }
+  .tds-sample-checklist {
+    box-sizing: border-box;
+    min-height: 270.5mm;
+    position: relative;
+  }
+  .tds-template-content .tds-sample-checklist table {
+    border-collapse: collapse !important;
+    table-layout: fixed;
+    width: 100%;
+  }
+  .tds-template-content .tds-sample-checklist td,
+  .tds-template-content .tds-sample-checklist th {
+    border: 1px solid #000 !important;
+    padding: 2px 4px;
+    vertical-align: middle;
+  }
+  .sample-check-header {
+    height: 25.5mm;
+    margin-bottom: 4.5mm;
+  }
+  .sample-check-logo {
+    text-align: center;
+    width: 34.6%;
+  }
+  .sample-check-logo img {
+    display: block;
+    height: 75px;
+    max-width: 178px;
+    margin: 0 auto;
+    object-fit: contain;
+  }
+  .sample-check-lab,
+  .sample-check-title {
+    text-align: center;
+  }
+  .sample-check-lab {
+    font-size: 15.5px;
+    line-height: 1.15;
+  }
+  .sample-check-lab strong {
+    font-size: 21px;
+  }
+  .sample-check-title {
+    font-size: 18px;
+    height: 26px;
+  }
+  .sample-check-meta {
+    margin-bottom: 5mm;
+  }
+  .sample-check-meta td {
+    height: 23px;
+  }
+  .sample-check-meta td:first-child {
+    width: 61%;
+  }
+  .sample-check-allocation td {
+    height: 23px;
+  }
+  .sample-check-allocation td:nth-child(1),
+  .sample-check-allocation td:nth-child(3) {
+    width: 25%;
+  }
+  .sample-check-allocation td:nth-child(2) {
+    width: 10%;
+  }
+  .sample-check-section-title {
+    font-size: 18px;
+    height: 24px;
+    padding: 1px 4px !important;
+    text-align: center;
+  }
+  .sample-check-table th {
+    font-size: 17px;
+    height: 38px;
+    text-align: center;
+  }
+  .sample-check-sr-col,
+  .sample-check-sr {
+    text-align: center;
+    width: 5%;
+  }
+  .sample-check-particular-col {
+    width: 58%;
+  }
+  .sample-check-yes-col {
+    width: 10%;
+  }
+  .sample-check-remark-col {
+    width: 27%;
+  }
+  .sample-check-table tbody td {
+    height: 20px;
+  }
+  .sample-check-table tbody tr:nth-child(1) td,
+  .sample-check-table tbody tr:nth-child(2) td {
+    height: 58px;
+  }
+  .sample-check-remark {
+    height: 27px !important;
+  }
+  .sample-check-sign {
+    bottom: 32mm;
+    display: flex;
+    justify-content: space-between;
+    left: 0;
+    position: absolute;
+    right: 0;
+  }
+  .sample-check-footer {
+    bottom: 17mm;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    left: 0;
+    position: absolute;
+    right: 0;
+  }
+  .sample-check-footer strong:first-child,
+  .sample-check-footer strong:last-child {
+    text-align: right;
+  }
+  .tds-template-content .tds-check-sign-table,
+  .tds-template-content .tds-check-sign-table td,
+  .tds-template-content .tds-check-sign-table th,
+  .tds-template-content .tds-check-footer-table,
+  .tds-template-content .tds-check-footer-table td,
+  .tds-template-content .tds-check-footer-table th {
+    border: 0 !important;
+  }
+  .tds-template-content .tds-check-sign-table {
+    margin-top: 5mm !important;
+    margin-bottom: 2mm !important;
+    page-break-inside: avoid;
+  }
+  .tds-template-content .tds-check-sign-table td {
+    height: 10mm !important;
+    vertical-align: top !important;
+  }
+  .tds-template-content .tds-check-footer-table {
+    margin-top: 2mm !important;
+    page-break-before: avoid;
+    page-break-inside: avoid;
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+  .tds-template-content .tds-check-footer-table td {
+    height: 6mm !important;
+    overflow: hidden !important;
+    vertical-align: middle !important;
+    white-space: normal !important;
+  }
+  .tds-template-content .tds-check-footer-table td:last-child {
+    text-align: right !important;
+  }
+  .tds-template-content,
+  .tds-template-content * {
+    scrollbar-width: none;
+  }
+  .tds-template-content ::-webkit-scrollbar {
+    display: none;
+    height: 0;
+    width: 0;
+  }
+  {% endif %}
+  {% if document_type == 'job_order' %}
+  .tds-template-content {
+    font-size: 9px;
+    line-height: 1.05;
+    min-height: 257mm;
+    position: relative;
+  }
+  .tds-template-content p {
+    margin: 0 0 2px;
+  }
+  .tds-template-content th,
+  .tds-template-content td {
+    padding: 2px 3px;
+    vertical-align: middle;
+  }
+  .tds-template-content table:first-of-type td,
+  .tds-template-content table:first-of-type th {
+    padding: 1px 3px;
+  }
+  .tds-template-content img {
+    max-height: 58px;
+    object-fit: contain;
+  }
+  .tds-template-content table {
+    margin: 0 0 8px;
+  }
+  .tds-template-content table:last-of-type {
+    margin-bottom: 0;
+  }
+  .tds-template-content .tds-job-sign-table {
+    bottom: 22mm;
+    left: 0;
+    margin: 0 !important;
+    position: absolute;
+    right: 0;
+    width: 100% !important;
+  }
+  .tds-template-content .tds-job-sign-table td {
+    height: 16mm;
+    vertical-align: bottom !important;
+  }
+  .tds-template-content .tds-job-sign-table,
+  .tds-template-content .tds-job-sign-table td,
+  .tds-template-content .tds-job-sign-table th,
+  .tds-template-content .tds-job-footer-table,
+  .tds-template-content .tds-job-footer-table td,
+  .tds-template-content .tds-job-footer-table th {
+    border: 0 !important;
+  }
+  .tds-template-content .tds-job-footer-table {
+    bottom: 8mm;
+    left: 0;
+    margin: 0 !important;
+    position: absolute;
+    right: 0;
+    text-align: center;
+    width: 100% !important;
+  }
+  .tds-template-content .tds-job-page-marker {
+    bottom: 8mm;
+    font-weight: 700;
+    left: 0;
+    margin: 0 !important;
+    position: absolute;
+    right: 0;
+    text-align: center;
+  }
+  .tds-template-content .tds-job-order {
+    box-sizing: border-box;
+    font-size: 11px;
+    line-height: 1.15;
+    min-height: 257mm;
+    padding-bottom: 42mm;
+    position: relative;
+  }
+  .tds-template-content .tds-job-order table {
+    border-collapse: collapse !important;
+    margin: 0 0 9px;
+    table-layout: fixed;
+    width: 100%;
+  }
+  .tds-template-content .tds-job-order table:last-of-type {
+    bottom: auto;
+    left: auto;
+    margin: 0 0 9px !important;
+    position: static;
+    right: auto;
+    width: 100% !important;
+  }
+  .tds-template-content .tds-job-order td,
+  .tds-template-content .tds-job-order th {
+    border: 1px solid #000 !important;
+    padding: 3px 4px;
+    vertical-align: middle;
+  }
+  .tds-job-header {
+    margin-bottom: 12px !important;
+  }
+  .tds-job-logo {
+    width: 28%;
+    text-align: center;
+  }
+  .tds-job-logo img {
+    display: block;
+    height: 66px;
+    max-width: 150px;
+    margin: 0 auto;
+    object-fit: contain;
+  }
+  .tds-job-lab,
+  .tds-job-address,
+  .tds-job-title {
+    text-align: center;
+  }
+  .tds-job-lab {
+    font-size: 18px;
+  }
+  .tds-job-address {
+    font-size: 11px;
+  }
+  .tds-job-title {
+    font-size: 14px;
+  }
+  .tds-job-meta td:nth-child(1),
+  .tds-job-meta td:nth-child(3) {
+    width: 20%;
+  }
+  .tds-job-meta td:nth-child(2),
+  .tds-job-meta td:nth-child(4) {
+    width: 30%;
+  }
+  .tds-job-info {
+    border: 1px solid #000;
+    margin-bottom: 12px;
+    min-height: 42px;
+    padding: 5px 4px;
+  }
+  .tds-job-info > div:first-child {
+    margin-bottom: 8px;
+  }
+  .tds-job-group {
+    margin-left: 64px;
+  }
+  .tds-job-tests th {
+    text-align: center;
+  }
+  .tds-job-tests .job-sr {
+    text-align: center;
+    width: 11%;
+  }
+  .tds-job-tests th:nth-child(1) {
+    width: 11%;
+  }
+  .tds-job-tests th:nth-child(3) {
+    width: 20%;
+  }
+  .tds-job-tests th:nth-child(4) {
+    width: 24%;
+  }
+  .tds-job-signatures {
+    bottom: 22mm;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    left: 0;
+    position: absolute;
+    right: 0;
+  }
+  .tds-job-signatures > div {
+    font-size: 11px;
+  }
+  .tds-job-signatures > div:nth-child(2) {
+    text-align: center;
+  }
+  .tds-job-signatures > div:nth-child(3) {
+    text-align: right;
+  }
+  .tds-job-page {
+    bottom: 8mm;
+    left: 0;
+    position: absolute;
+    right: 0;
+    text-align: center;
+  }
+  {% endif %}
+  .tds-ac-document {
+    color: #000;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 12px;
+    line-height: 1.12;
+    box-sizing: border-box;
+  }
+  .tds-template-content .tds-ac-document table {
+    border-collapse: collapse !important;
+    table-layout: fixed;
+    width: 100%;
+  }
+  .tds-template-content .tds-ac-document td,
+  .tds-template-content .tds-ac-document th {
+    border: 1px solid #000 !important;
+    padding: 2px 3px;
+    vertical-align: middle;
+  }
+  .tds-ac-header {
+    margin-bottom: 14px;
+  }
+  .tds-ac-logo {
+    width: 31%;
+    text-align: center;
+  }
+  .tds-ac-logo img {
+    display: block;
+    height: 70px;
+    max-width: 155px;
+    margin: 0 auto;
+    object-fit: contain;
+  }
+  .tds-ac-lab {
+    height: 44px;
+    text-align: center;
+    white-space: normal;
+    word-break: normal;
+  }
+  .tds-ac-lab strong {
+    display: inline-block;
+    margin-bottom: 2px;
+    font-size: 17px;
+  }
+  .tds-ac-title {
+    height: 23px;
+    text-align: center;
+    font-size: 13px;
+  }
+  .tds-ac-meta {
+    margin-bottom: 0;
+  }
+  .tds-template-content .tds-ac-meta td {
+    height: 18px;
+  }
+  .tds-ac-meta td:first-child {
+    width: 55%;
+  }
+  .tds-ac-meta td:nth-child(2) {
+    width: 20%;
+  }
+  .tds-ac-checklist {
+    margin-top: 0;
+  }
+  .tds-ac-checklist .ac-sr-col {
+    width: 8%;
+  }
+  .tds-ac-checklist .ac-check-col {
+    width: 5.5%;
+  }
+  .tds-template-content .tds-ac-checklist th,
+  .tds-template-content .tds-ac-checklist td {
+    height: 18px;
+  }
+  .tds-ac-checklist th {
+    text-align: center;
+  }
+  .tds-ac-checklist .ac-sr {
+    text-align: center;
+  }
+  .tds-ac-note {
+    margin: 14px 0 18px;
+    font-size: 16px;
+  }
+  .tds-ac-sign {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0;
+    font-size: 16px;
+  }
+  .tds-ac-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 48px;
+    font-size: 16px;
+  }
+  .tds-ac-footer strong:first-child {
+    text-align: right;
+  }
+  .tds-ac-footer strong:last-child {
+    text-align: right;
+  }
+  {% if document_type == 'ac' %}
+  .tds-template-content {
+    zoom: 0.8;
+  }
+  @supports not (zoom: 1) {
+    .tds-template-content {
+      transform: scale(0.8);
+      transform-origin: top center;
+      width: 125% !important;
+    }
+  }
+  {% endif %}
+  {% if document_type == 'checklist' %}
+  .tds-template-content {
+    zoom: 0.8;
+  }
+  @supports not (zoom: 1) {
+    .tds-template-content {
+      transform: scale(0.8);
+      transform-origin: top center;
+      width: 125% !important;
+    }
+  }
+  {% endif %}
   @media print {
+    /* Disable absolute positioning for footer/signature blocks to avoid overlap */
+    .tds-template-content .tds-job-sign-table,
+    .tds-template-content .tds-job-footer-table,
+    .tds-template-content .tds-check-sign-table,
+    .tds-template-content .tds-check-footer-table,
+    .tds-template-content .tds-job-page-marker {
+      position: static !important;
+      bottom: auto !important;
+      left: auto !important;
+      right: auto !important;
+      width: 100% !important;
+    }
+    .tds-template-content .tds-job-order,
+    .tds-template-content .tds-sample-checklist {
+      padding-bottom: 0 !important;
+      position: static !important;
+    }
     @page {
-      size: A4;
-      margin: 8mm;
+      size: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}Letter{% else %}A4{% endif %};
+      margin: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}0{% else %}8mm{% endif %};
     }
     html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
     body::before, nav, .tds-document-actions { display: none !important; }
@@ -79,6 +695,265 @@
       margin: 0 !important;
       padding: 0 !important;
     }
+    .tds-print-sheet {
+      width: 100% !important;
+      min-height: auto !important;
+      padding: {% if document_type == 'ac' %}1.5mm 6.5mm 7mm{% elif document_type == 'job_order' %}13mm 8mm 9mm{% elif document_type == 'checklist' %}1.5mm 6.5mm 7mm{% else %}0{% endif %} !important;
+      box-sizing: border-box !important;
+    }
+    .tds-template-content {
+      font-size: 12px !important;
+      line-height: 1.2 !important;
+    }
+    .tds-template-content table {
+      width: 100% !important;
+      table-layout: fixed;
+    }
+    .tds-template-content .tds-ac-document {
+      font-size: 12px !important;
+      line-height: 1.12 !important;
+      margin: 0 auto !important;
+      width: 100% !important;
+    }
+    .tds-template-content .tds-ac-document table {
+      table-layout: auto !important;
+    }
+    {% if document_type == 'ac' %}
+    .tds-template-content {
+      zoom: 0.8 !important;
+    }
+    @supports not (zoom: 1) {
+      .tds-template-content {
+        transform: scale(0.8);
+        transform-origin: top center;
+        width: 125% !important;
+      }
+    }
+    {% endif %}
+    {% if document_type == 'checklist' %}
+    .tds-template-content {
+      font-family: Arial, Helvetica, sans-serif !important;
+      font-size: 16px !important;
+      line-height: 1.15 !important;
+      zoom: 0.8 !important;
+    }
+    @supports not (zoom: 1) {
+      .tds-template-content {
+        transform: scale(0.8);
+        transform-origin: top center;
+        width: 125% !important;
+      }
+    }
+    .tds-sample-checklist {
+      min-height: 270.5mm;
+      position: relative;
+    }
+    .tds-template-content .tds-sample-checklist td,
+    .tds-template-content .tds-sample-checklist th {
+      padding: 2px 4px !important;
+      vertical-align: middle !important;
+    }
+    .tds-template-content .tds-check-sign-table {
+      margin-top: 5mm !important;
+      margin-bottom: 2mm !important;
+      page-break-inside: avoid;
+    }
+    .tds-template-content .tds-check-sign-table td {
+      height: 10mm !important;
+    }
+    .tds-template-content .tds-check-footer-table {
+      margin-top: 2mm !important;
+      page-break-before: avoid;
+      page-break-inside: avoid;
+      table-layout: fixed !important;
+      width: 100% !important;
+    }
+    .tds-template-content .tds-check-footer-table td {
+      height: 6mm !important;
+      overflow: hidden !important;
+      white-space: normal !important;
+    }
+    .tds-template-content .tds-check-footer-table td:last-child {
+      text-align: right !important;
+    }
+    .tds-template-content,
+    .tds-template-content * {
+      scrollbar-width: none;
+    }
+    .tds-template-content ::-webkit-scrollbar {
+      display: none;
+      height: 0;
+      width: 0;
+    }
+    .sample-check-sign {
+      bottom: 32mm;
+    }
+    .sample-check-footer {
+      bottom: 17mm;
+    }
+    {% endif %}
+    {% if document_type == 'job_order' %}
+    .tds-template-content {
+      font-size: 9px !important;
+      line-height: 1.05 !important;
+      min-height: 257mm;
+      position: relative;
+    }
+    .tds-template-content table {
+      margin: 0 0 8px !important;
+    }
+    .tds-template-content th,
+    .tds-template-content td {
+      padding: 2px 3px !important;
+      vertical-align: middle !important;
+    }
+    .tds-template-content table:first-of-type td,
+    .tds-template-content table:first-of-type th {
+      padding: 1px 3px !important;
+    }
+    .tds-template-content img {
+      max-height: 58px !important;
+      object-fit: contain;
+    }
+    .tds-template-content .tds-job-sign-table {
+      bottom: 22mm;
+      left: 0;
+      margin: 0 !important;
+      position: absolute;
+      right: 0;
+      width: 100% !important;
+    }
+    .tds-template-content .tds-job-sign-table td {
+      height: 16mm;
+      vertical-align: bottom !important;
+    }
+    .tds-template-content .tds-job-sign-table,
+    .tds-template-content .tds-job-sign-table td,
+    .tds-template-content .tds-job-sign-table th,
+    .tds-template-content .tds-job-footer-table,
+    .tds-template-content .tds-job-footer-table td,
+    .tds-template-content .tds-job-footer-table th {
+      border: 0 !important;
+    }
+    .tds-template-content .tds-job-footer-table {
+      bottom: 8mm;
+      left: 0;
+      margin: 0 !important;
+      position: absolute;
+      right: 0;
+      text-align: center;
+      width: 100% !important;
+    }
+    .tds-template-content .tds-job-page-marker {
+      bottom: 8mm;
+      font-weight: 700;
+      left: 0;
+      margin: 0 !important;
+      position: absolute;
+      right: 0;
+      text-align: center;
+    }
+    .tds-template-content .tds-job-order {
+      font-size: 11px !important;
+      line-height: 1.15 !important;
+      min-height: 257mm;
+      padding-bottom: 42mm;
+      position: relative;
+    }
+    .tds-template-content .tds-job-order table:last-of-type {
+      bottom: auto;
+      left: auto;
+      margin: 0 0 9px !important;
+      position: static;
+      right: auto;
+      width: 100% !important;
+    }
+    .tds-template-content .tds-job-order td,
+    .tds-template-content .tds-job-order th {
+      padding: 3px 4px !important;
+    }
+    .tds-job-signatures {
+      bottom: 22mm;
+    }
+    .tds-job-page {
+      bottom: 8mm;
+    }
+    {% endif %}
+    {% if document_type == 'ads' %}
+    .tds-print-sheet {
+      padding: 0 !important;
+    }
+    .tds-ads-print-page {
+      height: 279mm !important;
+      margin: 0 !important;
+      min-height: 279mm !important;
+      overflow: hidden !important;
+      page-break-after: always;
+      break-after: page;
+    }
+    .tds-ads-print-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .tds-ads-page-body {
+      overflow: hidden;
+    }
+    .tds-ads-page-header .tds-template-content,
+    .tds-ads-page-footer .tds-template-content {
+      font-size: 11px !important;
+      line-height: 1.15 !important;
+    }
+    section .tds-template-content {
+      min-height: auto !important;
+    }
+    .tds-ads-body-section {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    {% endif %}
+    section {
+      page-break-inside: avoid;
+      break-inside: avoid;
+      display: block;
+    }
+    section:not(:first-of-type) {
+      page-break-before: always;
+      break-before: page;
+    }
+    section .tds-template-content {
+      page-break-inside: avoid;
+      break-inside: avoid;
+      orphans: 3;
+      widows: 3;
+    }
+    .tds-template-content table,
+    .tds-template-content table tbody,
+    .tds-template-content table tr,
+    .tds-template-content table thead,
+    .tds-template-content table tfoot {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    {% if document_type == 'ads' %}
+    section,
+    /* Force a new printed page for elements needing an explicit break */
+    .tds-force-break {
+      page-break-before: always !important;
+      break-before: page !important;
+    }
+    section .tds-template-content,
+    .tds-template-content table,
+    .tds-template-content table tbody,
+    .tds-template-content table thead,
+    .tds-template-content table tfoot {
+      page-break-inside: auto;
+      break-inside: auto;
+    }
+    .tds-template-content table tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    {% endif %}
   }
 </style>
 {% endblock %}
@@ -86,7 +961,7 @@
 <div class="tds-document-actions d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
   <div>
     <h5 class="mb-0">{{ document_title }} - Booking {{ booking.tracking_code }}</h5>
-    <div class="text-muted small">{{ booking.sample_name.name|default:"N.A" }} | {{ booking.sample_reg_no|default:"N.A" }}</div>
+    <div class="text-muted small">{{ booking.sample_name.name|default:"N.A" }} | {{ booking.sample_registration_no|default:"N.A" }}</div>
   </div>
   <div class="d-flex flex-wrap gap-2">
     <a class="btn btn-sm btn-outline-secondary" href="{% url 'bookings:detail' booking.pk %}">Back to Booking</a>
@@ -95,13 +970,90 @@
   </div>
 </div>
 
-<div class="card shadow-sm tds-print-sheet">
+<div class="card shadow-sm tds-print-sheet"
+     data-booking-tracking="{{ booking.tracking_code|default:''|escape }}"
+     data-booking-sample="{{ booking.sample_name.name|default:''|escape }}"
+     data-document-type="{{ document_type|default:''|escape }}">
   <div class="card-body">
     {% if rendered_templates or fallback_ads_templates %}
+      {% if document_type == 'ads' %}
+        {% for page in ads_print_pages %}
+        <section class="tds-ads-print-page">
+          {% if can_edit_tds_template and page.tds_template_pk %}
+          <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' page.tds_template_pk %}">Edit template</a>
+          {% endif %}
+          {% if page.header %}
+          <div class="tds-ads-page-header">
+            <div class="tds-template-content">{{ page.header|safe }}</div>
+          </div>
+          {% endif %}
+          <div class="tds-ads-page-body">
+            {% if page.source_preview.kind == "pdf" and page.source_preview.url %}
+            <object class="tds-source-frame" data="{{ page.source_preview.url }}" type="application/pdf">
+              <div class="alert alert-info py-2 mb-0">
+                PDF preview is not available in this browser.
+                <a href="{{ page.source_preview.url }}" target="_blank" rel="noopener">Open uploaded file</a>
+              </div>
+            </object>
+            {% elif page.source_preview.url and not page.content %}
+            <div class="alert alert-info py-2 mb-0">
+              This uploaded file type cannot be previewed in the browser.
+              <a href="{{ page.source_preview.url }}" target="_blank" rel="noopener">Open uploaded file</a>
+            </div>
+            {% else %}
+            <div class="tds-template-content">{{ page.content|strip_hfb|safe }}</div>
+            {% endif %}
+          </div>
+          {% if page.footer %}
+          <div class="tds-ads-page-footer">
+            <div class="tds-template-content">{{ page.footer|safe }}</div>
+          </div>
+          {% endif %}
+        </section>
+        {% empty %}
+        <div class="alert alert-info mb-0">
+          No printable ADS body content found for the selected tests. Add a test-wise ADS template or assign report templates to the selected tests.
+        </div>
+        {% endfor %}
+      {% else %}
       {% for item in rendered_templates %}
-      <section>
-        {% if item.content %}
-        <div class="tds-template-content">{{ item.content }}</div>
+      <section{% if document_type == 'ads' %} class="tds-ads-body-section"{% endif %}>
+        {% if can_edit_tds_template %}
+        <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
+        {% endif %}
+
+        {% if item.use_source_file %}
+          {% if item.source_preview.kind == "html" and item.source_preview.content %}
+          <div class="tds-template-content">
+            {% if document_type == 'ads' %}
+              {{ item.source_preview.content|strip_hfb|safe }}
+            {% else %}
+              {{ item.source_preview.content|strip_hfb|safe }}
+            {% endif %}
+          </div>
+          {% elif item.source_preview.kind == "pdf" and item.source_preview.url %}
+          <object class="tds-source-frame" data="{{ item.source_preview.url }}" type="application/pdf">
+            <div class="alert alert-info py-2 mb-0">
+              PDF preview is not available in this browser.
+              <a href="{{ item.source_preview.url }}" target="_blank" rel="noopener">Open uploaded file</a>
+            </div>
+          </object>
+          {% elif item.source_preview.url %}
+          <div class="alert alert-info py-2 mb-0">
+            This uploaded file type cannot be previewed in the browser.
+            <a href="{{ item.source_preview.url }}" target="_blank" rel="noopener">Open uploaded file</a>
+          </div>
+          {% else %}
+          <div class="alert alert-info py-2 mb-0">Uploaded source file is missing.</div>
+          {% endif %}
+        {% elif item.content %}
+        <div class="tds-template-content">
+          {% if document_type == 'ads' %}
+            {{ item.content|strip_hfb|safe }}
+          {% else %}
+            {{ item.content|strip_hfb|safe }}
+          {% endif %}
+        </div>
         {% else %}
         <div class="alert alert-info py-2 mb-0">
           Printable content is empty.
@@ -114,10 +1066,14 @@
       {% endfor %}
 
       {% for item in fallback_ads_templates %}
-      <section>
-        <div class="tds-template-content">{{ item.content }}</div>
+      <section{% if document_type == 'ads' %} class="tds-ads-body-section"{% endif %}>
+        <div class="tds-template-content">
+          {{ item.content|strip_hfb|safe }}
+        </div>
       </section>
       {% endfor %}
+      {% endif %}
+
     {% else %}
       <div class="alert alert-info mb-0">
         No active {{ document_title }} template found for this booking. Add one in TDS Template Master.
@@ -126,7 +1082,58 @@
   </div>
 </div>
 
-{% if print_mode %}
+<script>
+  (function () {
+    function forceBookingTablePageBreaks() {
+      try {
+        const sheetEl = document.querySelector('.tds-print-sheet');
+        const bookingTracking = sheetEl ? sheetEl.dataset.bookingTracking : '';
+        const bookingSample = sheetEl ? sheetEl.dataset.bookingSample : '';
+
+        // Only apply for ads documents
+        const isAds = sheetEl ? sheetEl.dataset.documentType === 'ads' : false;
+        if (!isAds) return;
+
+        const contents = document.querySelectorAll('.tds-template-content');
+        contents.forEach(content => {
+          const tables = content.querySelectorAll('table');
+          tables.forEach(tbl => {
+            if (tbl.dataset.tdsForceApplied) return;
+            const text = (tbl.textContent || '').trim();
+            const shouldForce = (bookingTracking && text.indexOf(bookingTracking) !== -1)
+              || (bookingSample && text.indexOf(bookingSample) !== -1)
+              || /booking|tracking|sample/i.test(text);
+            if (shouldForce) {
+              // prefer adding a wrapper to avoid breaking table styling
+              const wrapper = document.createElement('div');
+              wrapper.className = 'tds-force-break';
+              tbl.parentNode.insertBefore(wrapper, tbl);
+              wrapper.appendChild(tbl);
+              tbl.dataset.tdsForceApplied = '1';
+            }
+          });
+        });
+      } catch (e) {
+        // fail silently
+        console.error('forceBookingTablePageBreaks error', e);
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () {
+        forceBookingTablePageBreaks();
+      });
+    } else {
+      forceBookingTablePageBreaks();
+    }
+
+    window.addEventListener('beforeprint', function () {
+      forceBookingTablePageBreaks();
+    });
+  })();
+</script>
+
+{% if auto_print %}
 <script>
   (function () {
     let printed = false;
@@ -148,9 +1155,10 @@
       window.setTimeout(function () {
         printed = true;
         window.print();
-      }, 250);
+      }, 500);
     });
   })();
 </script>
 {% endif %}
+
 {% endblock %}

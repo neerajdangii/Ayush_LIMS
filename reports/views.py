@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from html import unescape
+import logging
+from pathlib import Path
 import re
 
 from django.contrib import messages
@@ -8,36 +11,31 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.auth import get_user_model
 from django.http import Http404
 from django.http import JsonResponse
-from django.http import HttpResponseServerError
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
-from django.http import HttpResponse
 from django.template.defaultfilters import linebreaksbr
 from django.template import engines
-from django.template.loader import render_to_string
-from django.utils.html import escape
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView, View
+from django.template import TemplateSyntaxError
+from django.utils.html import escape, strip_tags
+from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView, View
 from django.utils.decorators import method_decorator
-
-try:
-    from weasyprint import HTML
-except (ImportError, OSError):
-    HTML = None
 
 from bookings.models import Booking
 from bookings.permissions import RoleRequiredMixin, has_role
 
-from .forms import COAEditForm, ReportApprovalForm, ReportTemplateForm, TDSDocumentTemplateForm, _extract_uploaded_printable_content
-from .models import Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
+from .forms import COAEditForm, COALetterheadForm, ReportApprovalForm, ReportTemplateForm, TDSDocumentTemplateForm, _extract_uploaded_printable_content
+from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
 
 
 PUBLIC_REPORT_ALLOWED_STATUSES = {
     Report.Status.MANAGER_APPROVED,
     Report.Status.INCHARGE_APPROVED,
 }
+
+logger = logging.getLogger(__name__)
 
 def _format_report_date(value, include_time=False, month_year_only=False):
     if not value:
@@ -95,12 +93,15 @@ def _get_report_render_context(report, request, *, preview_mode, auto_print, is_
     base = reverse("reports:coa_public", kwargs={"pk": report.pk})
     if is_test_report:
         base += "?doc=test"
-    if is_plain_doc:
-        base += "&plain=1" if "?" in base else "?plain=1"
 
-    context["coa_public_url"] = request.build_absolute_uri(base)
-    context["qr_payload"] = context["coa_public_url"]
+    page_base = base
+    if is_plain_doc:
+        page_base += "&plain=1" if "?" in page_base else "?plain=1"
+
+    context["coa_public_url"] = request.build_absolute_uri(page_base)
+    context["qr_payload"] = request.build_absolute_uri(base)
     context["report_ceo_content"] = mark_safe(report.ceo_content or "")
+    context["coa_letterhead"] = COALetterhead.get_active()
     context.update(_build_report_date_context(report))
     return context
 
@@ -121,7 +122,11 @@ def _booking_template_context(booking, request):
         "uom": booking.uom.name if booking.uom_id else "",
         "sample_number": batch_no,
         "sample_no": batch_no,
-        "sample_reg_no": booking.sample_reg_no,
+        "sample_reg_no": booking.sample_registration_no,
+        "sample_registration_no": booking.sample_registration_no,
+        "certificate_no": booking.certificate_no,
+        "certificate_number": booking.certificate_no,
+        "report_number": booking.certificate_no,
         "booking_id": booking.tracking_code,
         "batch_no": batch_no,
         "batch_size": booking.batch_size,
@@ -146,14 +151,23 @@ def _booking_template_context(booking, request):
 
 
 def _render_tds_content(content, booking, request, document_type=None):
+    if not content and document_type == TDSDocumentTemplate.DocumentType.JOB_ORDER:
+        return _build_tds_job_order_html(content, booking)
+    if not content and document_type == TDSDocumentTemplate.DocumentType.CHECKLIST:
+        return _build_tds_sample_checklist_html(content, booking)
+    if not content and document_type == TDSDocumentTemplate.DocumentType.AC:
+        return _build_tds_ac_html(content, booking)
     if not content:
         return ""
-    template = engines["django"].from_string(content)
-    rendered_content = template.render(_booking_template_context(booking, request))
+    rendered_content = _render_django_fragment(content, booking, request, label=document_type or "document")
+    if "tds-template-render-error" in rendered_content:
+        return rendered_content
     rendered_content = _strip_tds_trailing_empty_blocks(rendered_content)
     rendered_content = _unwrap_tds_outer_table(rendered_content)
     if document_type == TDSDocumentTemplate.DocumentType.JOB_ORDER:
         rendered_content = _fill_tds_job_order(rendered_content, booking)
+    elif document_type == TDSDocumentTemplate.DocumentType.CHECKLIST:
+        rendered_content = _fill_tds_sample_checklist(rendered_content, booking)
     elif document_type == TDSDocumentTemplate.DocumentType.AC:
         rendered_content = _fill_tds_ac(rendered_content, booking)
     else:
@@ -161,16 +175,413 @@ def _render_tds_content(content, booking, request, document_type=None):
     return _strip_tds_trailing_empty_blocks(rendered_content)
 
 
+def _split_tds_rendered_pages(content):
+    content = str(content or "")
+    if not content:
+        return [""]
+    parts = re.split(
+        r"(?:\[\[page_break\]\]|<!--\s*pagebreak\s*-->|<[^>]+\bclass=[\"'][^\"']*(?:tds-page-break|page-break)[^\"']*[\"'][^>]*>\s*</[^>]+>)",
+        content,
+        flags=re.IGNORECASE,
+    )
+    pages = [part.strip() for part in parts if part and part.strip()]
+    return pages or [content]
+
+
+def _render_tds_template_fragment(content, booking, request):
+    if not content:
+        return ""
+    rendered_content = _render_django_fragment(content, booking, request, label="header/footer")
+    if "tds-template-render-error" in rendered_content:
+        return rendered_content
+    rendered_content = _fill_tds_booking_labels(rendered_content, booking)
+    rendered_content = rendered_content.replace("[[page_number]]", '<span class="tds-page-current"></span>')
+    rendered_content = rendered_content.replace("[[total_pages]]", '<span class="tds-page-total"></span>')
+    return _strip_tds_trailing_empty_blocks(rendered_content)
+
+
+def _fill_tds_page_placeholders(content, page_number, total_pages):
+    content = str(content or "")
+    if not content:
+        return ""
+    content = re.sub(
+        r'<span\b[^>]*class=["\'][^"\']*\btds-page-current\b[^"\']*["\'][^>]*>\s*</span>',
+        str(page_number),
+        content,
+        flags=re.IGNORECASE,
+    )
+    content = re.sub(
+        r'<span\b[^>]*class=["\'][^"\']*\btds-page-total\b[^"\']*["\'][^>]*>\s*</span>',
+        str(total_pages),
+        content,
+        flags=re.IGNORECASE,
+    )
+    return content
+
+
+def _ensure_tds_page_number(content):
+    content = str(content or "")
+    has_page_placeholder = "tds-page-current" in content or "tds-page-total" in content
+    if has_page_placeholder:
+        return content
+    page_number = '<div class="tds-ads-page-number">Page <span class="tds-page-current"></span> of <span class="tds-page-total"></span></div>'
+    if content.strip():
+        return f"{content}{page_number}"
+    return page_number
+
+
+def _looks_like_tds_ac_template(content):
+    return bool(
+        re.search(r"CHECKLIST\s+FOR\s+ANALYTICAL\s+DATA\s+REVIEW", content, flags=re.IGNORECASE)
+        or re.search(r"Details\s+to\s+be\s+Checked", content, flags=re.IGNORECASE)
+    )
+
+
+def _extract_tds_ac_logo_url(content):
+    match = re.search(r"<img\b[^>]*\bsrc=[\"'](?P<src>[^\"']+)[\"']", content or "", flags=re.IGNORECASE)
+    if match:
+        return match.group("src")
+    return "https://img1.wsimg.com/isteam/ip/a7648e86-1728-4dc8-9d7f-ccade2ccf6d2/Aayush%20Logo.png/:/rs=h:134,cg:true,m/qt=q:95"
+
+
+def _format_tds_ac_value(value, default="N.S."):
+    if value is None:
+        return default
+    value = str(value).strip()
+    return value or default
+
+
+def _tds_render_error_html(message, detail=""):
+    detail_html = f"<br><small>{escape(detail)}</small>" if detail else ""
+    return (
+        '<div class="alert alert-warning py-2 mb-0 tds-template-render-error">'
+        f"{escape(message)}{detail_html}"
+        "</div>"
+    )
+
+
+def _render_django_fragment(content, booking, request, *, label):
+    try:
+        template = engines["django"].from_string(content)
+        return template.render(_booking_template_context(booking, request))
+    except TemplateSyntaxError as exc:
+        logger.warning("TDS %s template syntax error for booking %s: %s", label, booking.pk, exc)
+        return _tds_render_error_html(
+            "This TDS template could not be rendered because its editable content has invalid template syntax.",
+            str(exc),
+        )
+    except Exception as exc:
+        logger.exception("TDS %s template render failed for booking %s", label, booking.pk)
+        return _tds_render_error_html(
+            "This TDS template could not be rendered. Please check the template content or uploaded source file.",
+            str(exc),
+        )
+
+
+def _build_tds_job_order_html(content, booking):
+    sample = booking.sample_name if booking.sample_name_id else None
+    sample_name = _format_tds_ac_value(sample.display_name if sample else "")
+    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
+    tests = list(booking.test_to_be_performed.order_by("name"))
+    test_rows = "".join(
+        "<tr>"
+        f"<td class=\"job-sr\">{index}</td>"
+        f"<td>{escape(test.name)}</td>"
+        "<td></td>"
+        "<td></td>"
+        "</tr>"
+        for index, test in enumerate(tests, start=1)
+    )
+    if not test_rows:
+        test_rows = '<tr><td class="job-sr">&nbsp;</td><td>&nbsp;</td><td></td><td></td></tr>'
+
+    values = {
+        "sample_name": sample_name,
+        "batch_no": _format_tds_ac_value(booking.batch_no),
+        "sample_quantity": _format_tds_ac_value(sample_qty),
+        "storage_condition": _format_tds_ac_value(booking.sample_condition),
+        "sampling_location": _format_tds_ac_value(booking.sample_location),
+        "collected_by": _format_tds_ac_value(booking.collected_by_name),
+        "report_no": _format_tds_ac_value(booking.certificate_no),
+        "ulr_no": "N.A",
+        "receipt_date": _format_tds_ac_value(_format_report_date(booking.sample_receipt_date)),
+        "analysis_start": _format_tds_ac_value(_format_report_date(booking.analysis_start_date)),
+        "analysis_end": _format_tds_ac_value(_format_report_date(booking.analysis_end_date)),
+        "discipline": _format_tds_ac_value(sample.discipline if sample else ""),
+        "group": _format_tds_ac_value(sample.test_group if sample else ""),
+        "description": _format_tds_ac_value(sample.description if sample else "", default=""),
+        "logo_url": _extract_tds_ac_logo_url(content),
+    }
+
+    return (
+        '<div class="tds-job-order">'
+        '<table class="tds-job-header"><tbody><tr>'
+        f'<td class="tds-job-logo" rowspan="3"><img src="{escape(values["logo_url"])}" alt="Ayush Research Laboratories Pvt. Ltd."></td>'
+        '<td class="tds-job-lab"><strong>Ayush Research Laboratories Pvt. Ltd.</strong></td>'
+        '</tr><tr><td class="tds-job-address">1st &amp; 2nd Floor, 25, Gokul Das Compound, Industrial Estate Opposite Kalyan Mill<br>Indore MP-452011</td></tr>'
+        '<tr><td class="tds-job-title"><strong>JOB ORDER</strong></td></tr></tbody></table>'
+        '<table class="tds-job-meta"><tbody>'
+        f'<tr><td><strong>Sample Name</strong></td><td>{escape(values["sample_name"])}</td><td><strong>Report No</strong></td><td>{escape(values["report_no"])}</td></tr>'
+        f'<tr><td><strong>Batch No</strong></td><td>{escape(values["batch_no"])}</td><td><strong>ULR No.</strong></td><td>{escape(values["ulr_no"])}</td></tr>'
+        f'<tr><td><strong>Sample Quantity</strong></td><td>{escape(values["sample_quantity"])}</td><td><strong>Sample Receipt Date</strong></td><td>{escape(values["receipt_date"])}</td></tr>'
+        f'<tr><td><strong>Storage Condition</strong></td><td>{escape(values["storage_condition"])}</td><td><strong>Analysis started on</strong></td><td>{escape(values["analysis_start"])}</td></tr>'
+        f'<tr><td><strong>Sampling Location</strong></td><td>{escape(values["sampling_location"])}</td><td><strong>Analysis completed on</strong></td><td>{escape(values["analysis_end"])}</td></tr>'
+        f'<tr><td><strong>Sample Collected by</strong></td><td>{escape(values["collected_by"])}</td><td></td><td></td></tr>'
+        '</tbody></table>'
+        '<div class="tds-job-info">'
+        f'<div><strong>Discipline:</strong> {escape(values["discipline"])} <strong class="tds-job-group">Group:</strong> {escape(values["group"])}</div>'
+        f'<div><strong>Sample Description:</strong> {escape(values["description"])}</div>'
+        '</div>'
+        '<table class="tds-job-tests"><thead><tr><th>Sr. No.</th><th>Test Parameter</th><th>Result</th><th>Specification Limits</th></tr></thead>'
+        f'<tbody>{test_rows}</tbody></table>'
+        '<div class="tds-job-signatures">'
+        '<div><strong>Analyzed By</strong><br>(Sign &amp; Date)</div>'
+        '<div><strong>Reviewed By</strong><br>(Sign &amp; Date)</div>'
+        '<div><strong>Approved By</strong><br>(Sign &amp; Date)</div>'
+        '</div>'
+        '<div class="tds-job-page"><strong>Page 1 of 1</strong></div>'
+        '</div>'
+    )
+
+
+def _build_tds_sample_checklist_html(content, booking):
+    sample = booking.sample_name if booking.sample_name_id else None
+    sample_name = _format_tds_ac_value(sample.display_name if sample else "")
+    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
+    rows = [
+        (
+            "1.",
+            "Is sample ID same on test request and sample container (AR No./ Batch no./ Mfg. Dt / Exp. Dt / Batch Size / Product name / Manufacturer Name) same as on the test request?",
+        ),
+        ("2.", "Does the sample ID on test request and container match with that in login software?"),
+        ("3.", "Sample storage condition, if any (temperature) ____________ °C."),
+        ("4.", "Sample requisition slip/Form"),
+        ("5.", "Is pharmacopoeia reference or customer specification provided?"),
+        ("6.", "Working standard (if provided)"),
+        ("7.", "Impurities provided (if requested / required)"),
+        ("8.", "Sample spillage during transportation or handling"),
+        ("9.", "Entries on requisition form are legible"),
+        ("10.", "Sample integrity/intact packing"),
+        ("11.", "Sample quantity sufficient required for all analysis"),
+        ("12.", "Availability of column if required"),
+        ("13.", "Is material hygroscopic"),
+        ("14.", "Other"),
+    ]
+    checklist_rows = "".join(
+        "<tr>"
+        f"<td class=\"sample-check-sr\">{escape(number)}</td>"
+        f"<td>{escape(particular)}</td>"
+        "<td></td>"
+        "<td></td>"
+        "</tr>"
+        for number, particular in rows
+    )
+    values = {
+        "sample_name": sample_name,
+        "page": "1",
+        "report_number": _format_tds_ac_value(booking.certificate_no),
+        "sample_number": _format_tds_ac_value(booking.batch_no),
+        "sample_received_on": _format_tds_ac_value(_format_report_date(booking.sample_receipt_date)),
+        "mfg_date": _format_tds_ac_value(_format_report_date(booking.manufacture_date, month_year_only=True)),
+        "exp_date": _format_tds_ac_value(_format_report_date(booking.expiry_retest_date, month_year_only=True)),
+        "job_allocation": "QC",
+        "testing_start_date": _format_tds_ac_value(_format_report_date(booking.analysis_start_date)),
+        "job_allocated_to": "QC",
+        "sample_quantity": _format_tds_ac_value(sample_qty),
+        "customer_ref": _format_tds_ac_value(booking.customer_sr_no),
+        "sample_condition": _format_tds_ac_value(booking.sample_condition),
+        "remark": _format_tds_ac_value(booking.remarks, default=""),
+        "logo_url": _extract_tds_ac_logo_url(content),
+    }
+
+    return (
+        '<div class="tds-sample-checklist">'
+        '<table class="sample-check-header"><tbody><tr>'
+        f'<td class="sample-check-logo" rowspan="2"><img src="{escape(values["logo_url"])}" alt="Ayush Research Laboratories Pvt. Ltd."></td>'
+        '<td class="sample-check-lab"><strong>Ayush Research Laboratories Pvt. Ltd.</strong><br>'
+        '1st &amp; 2nd Floor, 25, Gokul Das Compound, Industrial Estate Opposite Kalyan Mill<br>Indore MP-452011</td>'
+        '</tr><tr><td class="sample-check-title"><strong>CHECKLIST FOR SAMPLE VERIFICATION</strong></td></tr></tbody></table>'
+        '<table class="sample-check-meta"><tbody>'
+        f'<tr><td>Sample Name : <strong>{escape(values["sample_name"])}</strong></td><td>Page : <strong>{escape(values["page"])}</strong></td></tr>'
+        f'<tr><td colspan="2">Report Number : <strong>{escape(values["report_number"])}</strong></td></tr>'
+        f'<tr><td>Sample Number : <strong>{escape(values["sample_number"])}</strong></td><td>Sample Received On : <strong>{escape(values["sample_received_on"])}</strong></td></tr>'
+        f'<tr><td>Mfg. Date : <strong>{escape(values["mfg_date"])}</strong></td><td>Exp. date : <strong>{escape(values["exp_date"])}</strong></td></tr>'
+        '</tbody></table>'
+        '<table class="sample-check-allocation"><tbody>'
+        f'<tr><td>Job Allocation To Labs :</td><td><strong>{escape(values["job_allocation"])}</strong></td><td>Testing Start Date :</td><td><strong>{escape(values["testing_start_date"])}</strong></td></tr>'
+        f'<tr><td>Job Allocated To :</td><td><strong>{escape(values["job_allocated_to"])}</strong></td><td>Sample Quantity :</td><td><strong>{escape(values["sample_quantity"])}</strong></td></tr>'
+        f'<tr><td>Customer Ref. :</td><td><strong>{escape(values["customer_ref"])}</strong></td><td>Sample condition :</td><td><strong>{escape(values["sample_condition"])}</strong></td></tr>'
+        '</tbody></table>'
+        '<table class="sample-check-table"><colgroup>'
+        '<col class="sample-check-sr-col"><col class="sample-check-particular-col"><col class="sample-check-yes-col"><col class="sample-check-remark-col">'
+        '</colgroup><thead>'
+        '<tr><th colspan="4" class="sample-check-section-title">CHECKLIST FOR SAMPLE VERIFICATION</th></tr>'
+        '<tr><th>Sr.<br>No.</th><th>Particulars</th><th>Yes/No</th><th>Remark</th></tr>'
+        f'</thead><tbody>{checklist_rows}'
+        f'<tr><td colspan="4" class="sample-check-remark">Remark: {escape(values["remark"])}</td></tr>'
+        '</tbody></table>'
+        '<div class="sample-check-sign"><span>Done By</span><span>Reviewed By</span></div>'
+        '<div class="sample-check-footer"><strong>Page 1 of 1</strong><strong>QSF/MSP/7.4/F03-00</strong></div>'
+        '</div>'
+    )
+
+
+def _build_tds_ac_html(content, booking):
+    sample = booking.sample_name if booking.sample_name_id else None
+    sample_name = _format_tds_ac_value(sample.display_name if sample else "")
+    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
+    lab_value = "QC"
+    rows = [
+        ("01", "Sheet issued by QA verification"),
+        ("02", "Correct Product Code Mentioned/Batch no."),
+        ("03", "Correct Pharmacopoeia / Specification No./Version No. referred."),
+        ("04", "Correct STP No./Version No. referred."),
+        ("05", "All Balance print Outs are correct & available"),
+        ("06", "All Id No./Log book entries of instruments correct."),
+        ("07", "IS calibrated Instrument used for analysis?"),
+        ("08", "Balance log book entries of chemical WS & test correct."),
+        ("09", "All Log book entries of HPLC/Column correct."),
+        ("10", "Mobile phase Prepared correct."),
+        ("11", "Is correct Integration parameters applied during processing?"),
+        ("12", "Is system suitability criteria meets with specification."),
+        ("13", "Is retention time variation observed?"),
+        ("14", "All Calculation sheets verified with respect to reading/area/absorbance etc."),
+        ("15", "Any OOS/OOT result found."),
+        ("16", "Batch Table, injection volume, oven temp. verified"),
+        ("17", "Is all timings correct (Sonication, LOD, Dissolution, Shaking)"),
+        ("18", "Is RRT check acquired time match with Std wt. & impurity timing."),
+        ("19", "All standard and sample dilution are checked."),
+        ("20", "All log books are verified."),
+        ("21", "Chemical/Buffer verified."),
+        ("22", "All Calculation verified."),
+        ("23", "Overwriting cut with sign and date with justification verified"),
+        ("24", "LOD Calculation and entry in Log book verified"),
+        ("25", "UV/IR sheet, Wavelength, Absorbance, sign, Log book entry verified"),
+        ("26", "Standard validity and potency verified"),
+        ("27", "All related incident and deviation filled"),
+        ("28", "Molarities and standardization of volumetric solution verified."),
+        ("29", "Is attached the Audit trial of sample analysis by the analyst or reviewed by reviewer."),
+        ("30", "Others"),
+    ]
+    values = {
+        "sample_name": sample_name,
+        "page": "1",
+        "report_number": _format_tds_ac_value(booking.certificate_no),
+        "sample_number": _format_tds_ac_value(booking.batch_no),
+        "sample_received_on": _format_tds_ac_value(_format_report_date(booking.sample_receipt_date)),
+        "mfg_date": _format_tds_ac_value(_format_report_date(booking.manufacture_date, month_year_only=True)),
+        "exp_date": _format_tds_ac_value(_format_report_date(booking.expiry_retest_date, month_year_only=True)),
+        "job_allocation": lab_value,
+        "date_of_testing": _format_tds_ac_value(_format_report_date(booking.analysis_start_date)),
+        "job_allocated_to": lab_value,
+        "sample_quantity": _format_tds_ac_value(sample_qty),
+        "customer_ref": _format_tds_ac_value(booking.customer_sr_no),
+        "sample_condition": _format_tds_ac_value(booking.sample_condition),
+        "product_name": sample_name,
+        "batch_condition": _format_tds_ac_value(booking.batch_no),
+        "logo_url": _extract_tds_ac_logo_url(content),
+    }
+    checklist_rows = "".join(
+        "<tr>"
+        f"<td class=\"ac-sr\">{escape(number)}</td>"
+        f"<td>{escape(detail)}</td>"
+        "<td></td><td></td>"
+        "</tr>"
+        for number, detail in rows
+    )
+    return (
+        '<div class="tds-ac-document">'
+        '<table class="tds-ac-header"><tbody><tr>'
+        f'<td class="tds-ac-logo" rowspan="2"><img src="{escape(values["logo_url"])}" alt="Ayush Research Laboratories Pvt. Ltd."></td>'
+        '<td class="tds-ac-lab"><strong>Ayush Research Laboratories Pvt. Ltd.</strong><br>'
+        '1st &amp; 2nd Floor, 25, Gokul Das Compound, Industrial Estate Opposite Kalyan Mill Indore MP-452011</td>'
+        '</tr><tr><td class="tds-ac-title"><strong>CHECKLIST FOR ANALYTICAL DATA REVIEW</strong></td></tr></tbody></table>'
+        '<table class="tds-ac-meta"><tbody>'
+        f'<tr><td>Sample Name : <strong>{escape(values["sample_name"])}</strong></td><td colspan="2">Page : <strong>{escape(values["page"])}</strong></td></tr>'
+        f'<tr><td colspan="3">Report Number : <strong>{escape(values["report_number"])}</strong></td></tr>'
+        f'<tr><td>Sample Number : <strong>{escape(values["sample_number"])}</strong></td><td>Sample Received On :</td><td><strong>{escape(values["sample_received_on"])}</strong></td></tr>'
+        f'<tr><td>Mfg. Date : <strong>{escape(values["mfg_date"])}</strong></td><td>Exp. date :</td><td><strong>{escape(values["exp_date"])}</strong></td></tr>'
+        f'<tr><td>Job Allocation to Lab : <strong>{escape(values["job_allocation"])}</strong></td><td>Date of Testing :</td><td><strong>{escape(values["date_of_testing"])}</strong></td></tr>'
+        f'<tr><td>Job Allocated To : <strong>{escape(values["job_allocated_to"])}</strong></td><td>Sample Quantity :</td><td><strong>{escape(values["sample_quantity"])}</strong></td></tr>'
+        f'<tr><td>Customer Ref. : <strong>{escape(values["customer_ref"])}</strong></td><td>Sample Condition :</td><td><strong>{escape(values["sample_condition"])}</strong></td></tr>'
+        f'<tr><td colspan="3">Product Name : <strong>{escape(values["product_name"])}</strong></td></tr>'
+        f'<tr><td colspan="3">Batch No./Condition : <strong>{escape(values["batch_condition"])}</strong></td></tr>'
+        '</tbody></table>'
+        '<table class="tds-ac-checklist"><colgroup><col class="ac-sr-col"><col><col class="ac-check-col"><col class="ac-check-col"></colgroup>'
+        '<thead><tr><th>Sr. No.</th><th>Details to be Checked</th><th>Yes*</th><th>No*</th></tr></thead>'
+        f'<tbody>{checklist_rows}</tbody></table>'
+        '<p class="tds-ac-note">(* = Tick "&#10004;" mark which is applicable.)</p>'
+        '<div class="tds-ac-sign"><span>Done By</span><span>Reviewed By</span></div>'
+        '<div class="tds-ac-footer"><strong>Page 1 of 1</strong><strong>QSF|MSP|7.4|F09-00</strong></div>'
+        '</div>'
+    )
+
+
+def _render_tds_source_file(template, booking, request, document_type=None):
+    source_file = template.source_file
+    if not source_file:
+        return {"kind": "missing", "content": "", "url": ""}
+
+    suffix = Path(source_file.name or "").suffix.lower()
+    url = ""
+    try:
+        url = source_file.url
+    except ValueError:
+        url = ""
+
+    if suffix in {".doc", ".docx"} and template.source_preview_file:
+        try:
+            return {"kind": "pdf", "content": "", "url": template.source_preview_file.url}
+        except ValueError:
+            return {"kind": "download", "content": "", "url": url}
+    if suffix == ".pdf":
+        return {"kind": "pdf", "content": "", "url": url}
+    if suffix in {".html", ".htm", ".txt"}:
+        try:
+            source_file.open("rb")
+            content = _extract_uploaded_printable_content(source_file)
+        except OSError as exc:
+            logger.warning("TDS source file missing for template %s and booking %s: %s", template.pk, booking.pk, exc)
+            return {
+                "kind": "html",
+                "content": mark_safe(_tds_render_error_html("Uploaded source file is missing on this server.", str(exc))),
+                "url": url,
+            }
+        except Exception as exc:
+            logger.exception("TDS source file render failed for template %s and booking %s", template.pk, booking.pk)
+            return {
+                "kind": "html",
+                "content": mark_safe(_tds_render_error_html("Uploaded source file could not be read.", str(exc))),
+                "url": url,
+            }
+        finally:
+            try:
+                source_file.close()
+            except Exception:
+                pass
+        return {
+            "kind": "html",
+            "content": mark_safe(_render_tds_content(content, booking, request, document_type)),
+            "url": url,
+        }
+    if suffix == ".docx":
+        return {"kind": "download", "content": "", "url": url}
+    return {"kind": "download", "content": "", "url": url}
+
+
 def _fill_tds_job_order(content, booking):
     sample = booking.sample_name if booking.sample_name_id else None
     sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
     values = {
         "Sample Name": sample.display_name if sample else "",
+        "Batch Number": booking.batch_no,
+        "Batch No": booking.batch_no,
+        "Batch No.": booking.batch_no,
         "Sample Quantity": sample_qty,
         "Storage Condition": booking.sample_condition,
         "Sampling Location": booking.sample_location,
         "Sample Collected by": booking.collected_by_name,
-        "Report No": booking.sample_reg_no,
+        "Report No": booking.certificate_no,
         "ULR No.": "N.A",
         "Sample Receipt Date": _format_report_date(booking.sample_receipt_date),
         "Analysis started on": _format_report_date(booking.analysis_start_date),
@@ -180,12 +591,43 @@ def _fill_tds_job_order(content, booking):
     for label, value in values.items():
         content = _fill_next_empty_tds_cell(content, label, value)
 
+    content = _ensure_tds_job_order_batch_box(content, booking)
+
     if sample:
         content = _fill_inline_tds_label(content, "Discipline:", sample.discipline)
         content = _fill_inline_tds_label(content, "Group:", sample.test_group)
         content = _fill_inline_tds_label(content, "Sample Description:", sample.description)
 
-    return _fill_tds_job_order_tests(content, booking)
+    content = _fill_tds_job_order_tests(content, booking)
+    return _mark_tds_job_order_footer_tables(content)
+
+
+def _ensure_tds_job_order_batch_box(content, booking):
+    batch_no = (booking.batch_no or "").strip()
+    if not batch_no or re.search(r"Batch\s+(?:No\.?|Number)", content, flags=re.IGNORECASE):
+        return content
+
+    table_re = re.compile(r"<table\b[^>]*>.*?</table>", flags=re.IGNORECASE | re.DOTALL)
+    row_re = re.compile(r"<tr\b[^>]*>.*?</tr>", flags=re.IGNORECASE | re.DOTALL)
+
+    def replace_table(match):
+        table_html = match.group(0)
+        if not re.search(r"Sample\s+Name", table_html, flags=re.IGNORECASE):
+            return table_html
+
+        first_row = row_re.search(table_html)
+        if not first_row:
+            return table_html
+
+        batch_row = (
+            "<tr>"
+            "<td><strong>Batch Number</strong></td>"
+            f"<td colspan=\"3\">{escape(batch_no)}</td>"
+            "</tr>"
+        )
+        return table_html[: first_row.end()] + batch_row + table_html[first_row.end() :]
+
+    return table_re.sub(replace_table, content, count=1)
 
 
 def _fill_tds_ac(content, booking):
@@ -194,14 +636,14 @@ def _fill_tds_ac(content, booking):
     values = {
         "Sample Name": sample.display_name if sample else "",
         "Page": "1",
-        "Report Number": booking.sample_reg_no,
+        "Report Number": booking.certificate_no,
         "Sample Number": booking.batch_no,
         "Sample Received On": _format_report_date(booking.sample_receipt_date),
         "Mfg. Date": _format_report_date(booking.manufacture_date, month_year_only=True),
         "Exp. date": _format_report_date(booking.expiry_retest_date, month_year_only=True),
-        "Job Allocation to Lab": booking.sample_location,
+        "Job Allocation to Lab": "QC",
         "Date of Testing": _format_report_date(booking.analysis_start_date),
-        "Job Allocated To": booking.sample_location,
+        "Job Allocated To": "QC",
         "Sample Quantity": sample_qty,
         "Customer Ref.": booking.customer_sr_no,
         "Sample Condition": booking.sample_condition,
@@ -210,26 +652,178 @@ def _fill_tds_ac(content, booking):
     }
 
     for label, value in values.items():
+        previous_content = content
+        content = _fill_next_empty_tds_cell(content, label, value)
+        if content != previous_content:
+            continue
         content = _fill_inline_tds_label(content, f"{label} :", value)
         content = _fill_inline_tds_label(content, f"{label}:", value)
     return content
+
+
+def _fill_tds_sample_checklist(content, booking):
+    sample = booking.sample_name if booking.sample_name_id else None
+    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
+    received_date = _format_report_date(booking.sample_receipt_date)
+    values = (
+        ("Sample Name", sample.display_name if sample else ""),
+        ("Page", "1"),
+        ("Report Number", booking.certificate_no),
+        ("Sample Number", booking.batch_no),
+        ("Sample Received On", received_date),
+        ("Mfg. Date", _format_report_date(booking.manufacture_date, month_year_only=True)),
+        ("Exp. date", _format_report_date(booking.expiry_retest_date, month_year_only=True)),
+        ("Job Allocation To Labs", "QC"),
+        ("Job Allocation To Lab", "QC"),
+        ("Testing Start Date", received_date),
+        ("Date of Testing", received_date),
+        ("Job Allocated To", "QC"),
+        ("Sample Quantity", sample_qty),
+        ("Customer Ref.", booking.customer_sr_no),
+        ("Sample Condition", booking.sample_condition),
+        ("Remark", booking.remarks),
+    )
+
+    checklist_start = _find_tds_sample_checklist_grid_start(content)
+    if checklist_start is None:
+        fillable_content = content
+        checklist_content = ""
+    else:
+        fillable_content = content[:checklist_start]
+        checklist_content = content[checklist_start:]
+
+    for label, value in values:
+        previous_content = fillable_content
+        fillable_content = _fill_next_empty_tds_cell(fillable_content, label, value)
+        if fillable_content != previous_content:
+            continue
+        fillable_content = _fill_inline_tds_label(fillable_content, f"{label} :", value)
+        fillable_content = _fill_inline_tds_label(fillable_content, f"{label}:", value)
+    return _mark_tds_checklist_signature_table(fillable_content + checklist_content)
+
+
+def _find_tds_sample_checklist_grid_start(content):
+    title_re = re.compile(r"CHECKLIST\s+FOR\s+SAMPLE\s+VERIFICATION", flags=re.IGNORECASE)
+    for match in reversed(list(title_re.finditer(content))):
+        nearby = content[match.start() : match.start() + 2000]
+        if re.search(r"Sr\.?\s*(?:<[^>]+>|\s|&nbsp;)*No\.?|Particulars|Yes/No|Remark", nearby, flags=re.IGNORECASE):
+            return match.start()
+    return None
+
+
+def _mark_tds_checklist_signature_table(content):
+    table_re = re.compile(r"<table\b(?P<attrs>[^>]*)>.*?</table>", flags=re.IGNORECASE | re.DOTALL)
+
+    def add_table_class(table_html, attrs, class_name):
+        if re.search(r"\bclass\s*=", attrs, flags=re.IGNORECASE):
+            return re.sub(
+                r'(\bclass\s*=\s*["\'])([^"\']*)',
+                rf"\1\2 {class_name}",
+                table_html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        return table_html.replace("<table", f'<table class="{class_name}"', 1)
+
+    def replace(match):
+        table_html = match.group(0)
+        attrs = match.group("attrs") or ""
+        if re.search(r"Page\s+1\s+of\s+1|QSF", table_html, flags=re.IGNORECASE):
+            return add_table_class(table_html, attrs, "tds-check-footer-table")
+        if not (
+            re.search(r"Done\s+By|Analy[sz]ed\s+By", table_html, flags=re.IGNORECASE)
+            and re.search(r"Reviewed\s+By", table_html, flags=re.IGNORECASE)
+        ):
+            return table_html
+        return add_table_class(table_html, attrs, "tds-check-sign-table")
+
+    return table_re.sub(replace, content)
+
+
+def _mark_tds_job_order_footer_tables(content):
+    table_re = re.compile(r"<table\b(?P<attrs>[^>]*)>.*?</table>", flags=re.IGNORECASE | re.DOTALL)
+    page_block_re = re.compile(
+        r"<(?P<tag>p|div)\b(?P<attrs>[^>]*)>(?P<body>.*?Page\s+1\s+of\s+1.*?)</(?P=tag)>",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    def add_class(html, attrs, class_name, tag_name):
+        if re.search(r"\bclass\s*=", attrs, flags=re.IGNORECASE):
+            return re.sub(
+                r'(\bclass\s*=\s*["\'])([^"\']*)',
+                rf"\1\2 {class_name}",
+                html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        return html.replace(f"<{tag_name}", f'<{tag_name} class="{class_name}"', 1)
+
+    def replace(match):
+        table_html = match.group(0)
+        attrs = match.group("attrs") or ""
+        if re.search(r"Page\s+1\s+of\s+1|QSF", table_html, flags=re.IGNORECASE):
+            return add_class(table_html, attrs, "tds-job-footer-table", "table")
+        if (
+            re.search(r"Analy[sz]ed\s+By", table_html, flags=re.IGNORECASE)
+            and re.search(r"Reviewed\s+By", table_html, flags=re.IGNORECASE)
+            and re.search(r"Approved\s+By", table_html, flags=re.IGNORECASE)
+        ):
+            return add_class(table_html, attrs, "tds-job-sign-table", "table")
+        return table_html
+
+    def replace_page_block(match):
+        block_html = match.group(0)
+        attrs = match.group("attrs") or ""
+        return add_class(block_html, attrs, "tds-job-page-marker", match.group("tag").lower())
+
+    content = table_re.sub(replace, content)
+    return page_block_re.sub(replace_page_block, content)
 
 
 def _fill_next_empty_tds_cell(content, label, value):
     if not value:
         return content
 
-    empty_cell = r"<td\b(?P<value_attrs>[^>]*)>(?:\s|&nbsp;|&#160;|<br\s*/?>)*</td>"
-    pattern = (
-        rf"(?P<label_cell><td\b[^>]*>.*?{re.escape(label)}.*?</td>)"
-        rf"\s*{empty_cell}"
-    )
+    row_re = re.compile(r"<tr\b[^>]*>.*?</tr>", flags=re.IGNORECASE | re.DOTALL)
+    cell_re = re.compile(r"<t[dh]\b[^>]*>.*?</t[dh]>", flags=re.IGNORECASE | re.DOTALL)
+    empty_cell_re = re.compile(r"<td\b(?P<value_attrs>[^>]*)>(?:\s|&nbsp;|&#160;|<br\s*/?>)*</td>", flags=re.IGNORECASE)
+    replaced = False
 
-    def replace(match):
-        attrs = match.group("value_attrs") or ""
-        return f'{match.group("label_cell")}<td{attrs}>{escape(value)}</td>'
+    def normalize_label(text):
+        text = unescape(strip_tags(text)).replace("\xa0", " ")
+        text = re.sub(r"\s+", " ", text).strip()
+        return re.sub(r"[\s:.]+$", "", text).casefold()
 
-    return re.sub(pattern, replace, content, count=1, flags=re.IGNORECASE | re.DOTALL)
+    expected_label = normalize_label(label)
+
+    def replace_row(match):
+        nonlocal replaced
+        row_html = match.group(0)
+        if replaced:
+            return row_html
+
+        label_cell = None
+        for candidate in cell_re.finditer(row_html):
+            if normalize_label(candidate.group(0)) == expected_label:
+                label_cell = candidate
+                break
+
+        if not label_cell:
+            return row_html
+
+        empty_match = None
+        for candidate in empty_cell_re.finditer(row_html):
+            if candidate.start() > label_cell.end():
+                empty_match = candidate
+                break
+        if not empty_match:
+            return row_html
+
+        attrs = empty_match.group("value_attrs") or ""
+        replaced = True
+        return row_html[: empty_match.start()] + f"<td{attrs}>{escape(value)}</td>" + row_html[empty_match.end() :]
+
+    return row_re.sub(replace_row, content)
 
 
 def _fill_inline_tds_label(content, label, value):
@@ -342,9 +936,21 @@ def _strip_tds_trailing_empty_blocks(content):
 def _fill_tds_booking_labels(content, booking):
     sample_name = booking.sample_name.name if booking.sample_name_id else ""
     batch_no = booking.batch_no or ""
+    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
     replacements = (
         ("Sample Name", sample_name),
         ("Sample Number", batch_no),
+        ("Batch No.", batch_no),
+        ("Batch No", batch_no),
+        ("Sample Quantity", sample_qty),
+        ("Storage Condition", booking.sample_condition),
+        ("Sampling Location", booking.sample_location),
+        ("Sample Collected by", booking.collected_by_name),
+        ("Report No", booking.certificate_no),
+        ("ULR No.", "N.A"),
+        ("Sample Receipt Date", _format_report_date(booking.sample_receipt_date)),
+        ("Analysis started on", _format_report_date(booking.analysis_start_date)),
+        ("Analysis completed on", _format_report_date(booking.analysis_end_date)),
     )
 
     for label, value in replacements:
@@ -353,6 +959,14 @@ def _fill_tds_booking_labels(content, booking):
         content = re.sub(
             rf"({label}\s*:\s*)(?=(?:&nbsp;|\s|</(?:td|th|p|div|span|strong|b)>|<br\s*/?>))",
             rf"\g<1>{escape(value)}",
+            content,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+        label_pattern = re.escape(label).replace(r"\ ", r"\s+")
+        content = re.sub(
+            rf"(<t[dh]\b[^>]*>\s*(?:<[^>]+>\s*)*{label_pattern}\s*:?\s*(?:</[^>]+>\s*)*</t[dh]>\s*<t[dh]\b[^>]*>)(?:\s|&nbsp;|<br\s*/?>|<p\b[^>]*>(?:\s|&nbsp;|<br\s*/?>)*</p>)*(</t[dh]>)",
+            rf"\g<1>{escape(value)}\g<2>",
             content,
             count=1,
             flags=re.IGNORECASE,
@@ -473,6 +1087,20 @@ class TDSDocumentTemplateCreateView(PermissionRequiredMixin, RoleRequiredMixin, 
         messages.success(self.request, "TDS template added.")
         return reverse("reports:tds_template_list")
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        self._generate_preview_if_needed()
+        return response
+
+    def _generate_preview_if_needed(self):
+        if self.object.display_mode != TDSDocumentTemplate.DisplayMode.SOURCE_FILE:
+            return
+        ok, message = self.object.generate_source_preview()
+        if ok:
+            self.object.save(update_fields=["source_preview_file", "updated_at"])
+        else:
+            messages.warning(self.request, message)
+
 
 class TDSDocumentTemplateExtractView(PermissionRequiredMixin, RoleRequiredMixin, View):
     permission_required = "reports.add_tdsdocumenttemplate"
@@ -518,6 +1146,20 @@ class TDSDocumentTemplateUpdateView(PermissionRequiredMixin, RoleRequiredMixin, 
         messages.success(self.request, "TDS template updated.")
         return reverse("reports:tds_template_list")
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        self._generate_preview_if_needed()
+        return response
+
+    def _generate_preview_if_needed(self):
+        if self.object.display_mode != TDSDocumentTemplate.DisplayMode.SOURCE_FILE:
+            return
+        ok, message = self.object.generate_source_preview()
+        if ok:
+            self.object.save(update_fields=["source_preview_file", "updated_at"])
+        else:
+            messages.warning(self.request, message)
+
 
 class TDSDocumentTemplateDeleteView(PermissionRequiredMixin, RoleRequiredMixin, DeleteView):
     permission_required = "reports.delete_tdsdocumenttemplate"
@@ -554,7 +1196,24 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
             raise Http404("Unknown TDS document type.")
 
         selected_tests = list(booking.test_to_be_performed.select_related("report_template").order_by("name"))
+        common_ads_header = ""
+        common_ads_footer = ""
         if document_type == TDSDocumentTemplate.DocumentType.ADS:
+            common_ads_templates = list(
+                TDSDocumentTemplate.objects.filter(
+                    document_type=document_type,
+                    is_active=True,
+                    test__isnull=True,
+                ).order_by("name")
+            )
+            for template in common_ads_templates:
+                if not common_ads_header and template.header_content:
+                    common_ads_header = mark_safe(_render_tds_template_fragment(template.header_content, booking, self.request))
+                if not common_ads_footer and template.footer_content:
+                    common_ads_footer = mark_safe(_render_tds_template_fragment(template.footer_content, booking, self.request))
+                if common_ads_header and common_ads_footer:
+                    break
+
             template_qs = TDSDocumentTemplate.objects.filter(
                 document_type=document_type,
                 is_active=True,
@@ -567,14 +1226,23 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
                 test__isnull=True,
             ).select_related("test").order_by("name")
 
-        rendered_templates = [
-            {
-                "template": template,
-                "test": template.test,
-                "content": mark_safe(_render_tds_content(template.content, booking, self.request, document_type)),
-            }
-            for template in template_qs
-        ]
+        rendered_templates = []
+        for template in template_qs:
+            use_source_file = template.display_mode == TDSDocumentTemplate.DisplayMode.SOURCE_FILE
+            source_preview = _render_tds_source_file(template, booking, self.request, document_type) if use_source_file else None
+            content = "" if use_source_file else _render_tds_content(template.content, booking, self.request, document_type)
+            rendered_templates.append(
+                {
+                    "template": template,
+                    "test": template.test,
+                    "header_content": mark_safe(_render_tds_template_fragment(template.header_content, booking, self.request)),
+                    "content": "" if use_source_file else mark_safe(content),
+                    "pages": [] if use_source_file else [mark_safe(page) for page in _split_tds_rendered_pages(content)],
+                    "footer_content": mark_safe(_render_tds_template_fragment(template.footer_content, booking, self.request)),
+                    "use_source_file": use_source_file,
+                    "source_preview": source_preview,
+                }
+            )
 
         fallback_ads_templates = []
         if document_type == TDSDocumentTemplate.DocumentType.ADS:
@@ -584,13 +1252,73 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
                     continue
                 report_template = getattr(test, "report_template", None)
                 if report_template and report_template.is_active and report_template.content.strip():
+                    content = _render_tds_content(report_template.content, booking, self.request, document_type)
                     fallback_ads_templates.append(
                         {
                             "template": report_template,
                             "test": test,
-                            "content": mark_safe(_render_tds_content(report_template.content, booking, self.request, document_type)),
+                            "header_content": "",
+                            "content": mark_safe(content),
+                            "pages": [mark_safe(page) for page in _split_tds_rendered_pages(content)],
+                            "footer_content": "",
                         }
                     )
+
+        ads_print_pages = []
+        if document_type == TDSDocumentTemplate.DocumentType.ADS:
+            page_groups = []
+
+            for item in rendered_templates:
+                if item["use_source_file"]:
+                    source_preview = item["source_preview"] or {}
+                    if source_preview.get("kind") == "html":
+                        pages = _split_tds_rendered_pages(source_preview.get("content") or "")
+                    else:
+                        pages = [""]
+                else:
+                    pages = item["pages"]
+
+                header = item["header_content"] or common_ads_header
+                footer = item["footer_content"] or common_ads_footer
+                for page in pages:
+                    page_groups.append(
+                        {
+                            "item": item,
+                            "tds_template_pk": item["template"].pk,
+                            "header": header,
+                            "content": page,
+                            "footer": footer,
+                            "source_preview": item["source_preview"] if item["use_source_file"] else None,
+                        }
+                    )
+
+            for item in fallback_ads_templates:
+                for page in item["pages"]:
+                    page_groups.append(
+                        {
+                            "item": item,
+                            "tds_template_pk": None,
+                            "header": common_ads_header,
+                            "content": page,
+                            "footer": common_ads_footer,
+                            "source_preview": None,
+                        }
+                    )
+
+            total_pages = len(page_groups)
+            ads_print_pages = [
+                {
+                    "item": group["item"],
+                    "tds_template_pk": group["tds_template_pk"],
+                    "header": mark_safe(group["header"]),
+                    "content": mark_safe(group["content"]),
+                    "footer": mark_safe(_fill_tds_page_placeholders(_ensure_tds_page_number(group["footer"]), index, total_pages)),
+                    "page_number": index,
+                    "total_pages": total_pages,
+                    "source_preview": group["source_preview"],
+                }
+                for index, group in enumerate(page_groups, start=1)
+            ]
 
         context.update(
             {
@@ -600,7 +1328,12 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
                 "selected_tests": selected_tests,
                 "rendered_templates": rendered_templates,
                 "fallback_ads_templates": fallback_ads_templates,
-                "print_mode": self.request.GET.get("print") == "1",
+                "ads_print_pages": ads_print_pages,
+                "common_ads_header": common_ads_header,
+                "common_ads_footer": common_ads_footer,
+                "print_mode": self.request.GET.get("print") == "1" or document_type == TDSDocumentTemplate.DocumentType.AC,
+                "auto_print": self.request.GET.get("print") == "1" or self.request.GET.get("autoprint") == "1",
+                "can_edit_tds_template": self.request.user.has_perm("reports.change_tdsdocumenttemplate"),
             }
         )
         return context
@@ -755,7 +1488,7 @@ class COAEditView(PermissionRequiredMixin, RoleRequiredMixin, UpdateView):
                 "customer_name": report.booking.customer.name if report.booking.customer else "",
                 "batch_no": report.booking.batch_no or "",
                 "tracking_code": report.booking.tracking_code,
-                "sample_reg_no": report.booking.sample_reg_no,
+                "sample_reg_no": report.booking.sample_registration_no,
                 "certificate_no": report.certificate_no,
                 "updated_at": timezone.localtime(report.updated_at).strftime("%d/%m/%Y %I:%M %p")
                 if timezone.is_aware(report.updated_at)
@@ -835,41 +1568,43 @@ class COAPlainDocumentView(PermissionRequiredMixin, RoleRequiredMixin, TemplateV
         )
 
 
-class COAPDFView(PermissionRequiredMixin, RoleRequiredMixin, DetailView):
+class COAOptionView(PermissionRequiredMixin, RoleRequiredMixin, DetailView):
     permission_required = "reports.view_report"
     required_roles = ("Manager", "Incharge", "Analyst", "Admin")
     model = Report
-    template_name = None
-
-    def get(self, request, *args, **kwargs):
-        report = self.get_object()
-
-        if HTML is None:
-            return HttpResponseServerError("PDF generation is unavailable because WeasyPrint system libraries are missing.")
-
-        # Render HTML context
-        context = self.get_context_data()
-        html_string = render_to_string('reports/coa_doc.html', context, request=request)
-
-        # Generate PDF
-        html = HTML(string=html_string)
-        pdf_bytes = html.write_pdf()
-
-        # Return PDF response
-        response = HttpResponse(pdf_bytes, content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="COA_{report.booking.sample_reg_no}.pdf"'
-        return response
+    template_name = "reports/coa_options.html"
+    context_object_name = "report"
 
     def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
         report = self.object
-        context = _get_report_render_context(
-            report,
-            self.request,
-            preview_mode=False,
-            auto_print=False,
-            is_plain_doc=self.request.GET.get("plain") == "1",
-            is_test_report=self.request.GET.get("doc") == "test",
-        )
+        preview_url = reverse("reports:coa_print", kwargs={"pk": report.pk})
+        context["report_options"] = [
+            {
+                "title": "Certificate of Analysis",
+                "description": "Final COA with configured letterhead, watermark, signatures, and QR code.",
+                "preview_url": preview_url,
+                "badge": "COA",
+            },
+            {
+                "title": "Certificate of Analysis Plain",
+                "description": "COA content without letterhead artwork for pre-printed stationery.",
+                "preview_url": f"{preview_url}?plain=1",
+                "badge": "Plain",
+            },
+            {
+                "title": "Test Report",
+                "description": "Test Report format with standard report letterhead.",
+                "preview_url": f"{preview_url}?doc=test",
+                "badge": "Test",
+            },
+            {
+                "title": "Test Report Plain",
+                "description": "Plain Test Report for use with pre-printed stationery.",
+                "preview_url": f"{preview_url}?doc=test&plain=1",
+                "badge": "Test Plain",
+            },
+        ]
         return context
 
 
@@ -932,6 +1667,30 @@ class ReportTemplateDeleteView(PermissionRequiredMixin, RoleRequiredMixin, Delet
     def get_success_url(self):
         messages.success(self.request, "Report template deleted.")
         return reverse("reports:template_list")
+
+
+class COALetterheadUpdateView(PermissionRequiredMixin, RoleRequiredMixin, FormView):
+    permission_required = "reports.change_reporttemplate"
+    required_roles = ("Admin", "Manager")
+    form_class = COALetterheadForm
+    template_name = "reports/coa_letterhead_form.html"
+
+    def get_object(self):
+        obj, _ = COALetterhead.objects.get_or_create(pk=1, defaults={"name": "COA Letterhead"})
+        return obj
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["instance"] = self.get_object()
+        return kwargs
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, "COA letterhead settings updated.")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse("reports:coa_letterhead")
 
 
 class ReportTemplateContentView(PermissionRequiredMixin, RoleRequiredMixin, DetailView):
@@ -1009,7 +1768,7 @@ class ReportApiDetailView(PermissionRequiredMixin, RoleRequiredMixin, DetailView
     def _serialize_report(self, report):
         return {
             "id": report.pk,
-            "report_name": report.booking.sample_reg_no if report.booking else f"Report {report.pk}",
+            "report_name": report.booking.sample_registration_no if report.booking else f"Report {report.pk}",
             "content": report.ceo_content,
             "created_at": timezone.localtime(report.created_at).isoformat() if timezone.is_aware(report.created_at) else report.created_at.isoformat(),
             "updated_at": timezone.localtime(report.updated_at).isoformat() if timezone.is_aware(report.updated_at) else report.updated_at.isoformat(),

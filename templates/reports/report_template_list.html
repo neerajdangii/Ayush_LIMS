@@ -6,9 +6,14 @@
     <h3 class="mb-1">Report Templates</h3>
     <div class="text-muted">Create and reuse result-section templates in COA edit.</div>
   </div>
-  {% if perms.reports.add_reporttemplate %}
-  <a href="{% url 'reports:template_add' %}" class="btn btn-primary">Add Template</a>
-  {% endif %}
+  <div class="d-flex gap-2">
+    {% if perms.reports.change_reporttemplate %}
+    <a href="{% url 'reports:coa_letterhead' %}" class="btn btn-outline-primary">COA Letterhead</a>
+    {% endif %}
+    {% if perms.reports.add_reporttemplate %}
+    <a href="{% url 'reports:template_add' %}" class="btn btn-primary">Add Template</a>
+    {% endif %}
+  </div>
 </div>
 
 <div class="card shadow-sm">

@@ -10,7 +10,7 @@
 {% endif %}
 <div class="no-print" style="text-align:center;margin-bottom:16px;display:flex;gap:12px;justify-content:center;">
   <a class="btn btn-warning" type="button" href="{% url 'reports:coa_edit' report.pk %}">Edit Report</a>
-  <button class="btn btn-primary" type="button" onclick="window.print()">Print</button>
+  <button class="btn btn-primary" type="button" id="coa-print-btn">Print / Save PDF</button>
 </div>
 {% endblock %}
 
@@ -63,53 +63,40 @@
 {{ block.super }}
 {% if preview_mode %}
 <script src="{% static 'js/coa_paginate_v2.js' %}?v=20260417-1"></script>
-<script>
-(function() {
-  window.addEventListener('load', function() {
-    setTimeout(function() {
-      document.dispatchEvent(new CustomEvent('coa:ready'));
-    }, 100);
-  });
-})();
-</script>
 {% endif %}
 <script>
 (function(){
   const savePopup = document.querySelector('.coa-save-popup');
-  const downloadBtn=document.getElementById('coa-download-btn');
-  const pdfUrl='{{ pdf_post_url|default:"" }}';
-  const csrfToken='{{ csrf_token }}';
-  const plainParam='{{ plain_param|default:"" }}';
-  const docParam='{{ doc_param|default:"" }}';
+  const printBtn = document.getElementById('coa-print-btn');
+  const usesPagination = {{ preview_mode|yesno:"true,false" }};
 
-  async function downloadPdf(){
-    if(!pdfUrl){
-      alert('PDF download URL is not configured.');
-      return;
-    }
-    const qrCanvas=document.querySelector('.coa-qr-code canvas');
-    const qrData=qrCanvas? qrCanvas.toDataURL('image/png') : '';
-    const form=new FormData();
-    if(qrData){ form.append('qr_data',qrData); }
-    if(plainParam){ form.append('plain',plainParam); }
-    if(docParam){ form.append('doc',docParam); }
-    const response=await fetch(pdfUrl,{method:'POST',headers:{'X-CSRFToken':csrfToken},body:form});
-    if(!response.ok){ alert('Unable to generate PDF.'); return; }
-    const blob=await response.blob();
-    const url=URL.createObjectURL(blob);
-    const anchor=document.createElement('a');
-    anchor.href=url;
-    anchor.download='{{ report.booking.sample_reg_no|default:"COA" }}.pdf';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  function reportIsReady(){
+    return !usesPagination ||
+      document.body.classList.contains('coa-rendered-ok') ||
+      document.body.classList.contains('coa-pagination-failed');
   }
 
-  if(downloadBtn){
-    downloadBtn.addEventListener('click',()=>{
-      downloadPdf().catch(()=>alert('Unable to download PDF.'));
-    });
+  function printWhenReady(){
+    if (reportIsReady()) {
+      setTimeout(() => window.print(), 100);
+      return;
+    }
+
+    let printed = false;
+    const printOnce = () => {
+      if (printed || !reportIsReady()) {
+        return;
+      }
+      printed = true;
+      setTimeout(() => window.print(), 100);
+    };
+
+    document.addEventListener('coa:ready', printOnce, { once: true });
+    setTimeout(printOnce, 900);
+  }
+
+  if(printBtn){
+    printBtn.addEventListener('click', printWhenReady);
   }
 
   if(savePopup){
@@ -127,9 +114,7 @@
       const cleanUrl = `${url.pathname}${cleanSearch ? `?${cleanSearch}` : ''}${url.hash}`;
       window.history.replaceState({}, '', cleanUrl);
 
-      setTimeout(() => {
-        window.print();
-      }, 400);
+      printWhenReady();
     };
 
     let triggered = false;

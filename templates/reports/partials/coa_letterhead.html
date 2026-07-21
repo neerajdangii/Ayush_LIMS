@@ -1,13 +1,17 @@
 {% load static %}
 {% if is_continuation %}
-<div class="coa-print-wrapper {% if is_plain_doc %}coa-plain{% else %}coa-report-sheet{% endif %} coa-page-continuation {% if is_test_report %}coa-test-report{% else %}coa-coa-report{% endif %}" data-page-number="">
+<div class="coa-print-wrapper {% if is_plain_doc %}coa-plain{% else %}coa-report-sheet{% endif %} coa-page-continuation {% if is_test_report %}coa-test-report{% else %}coa-coa-report{% endif %}{% if coa_letterhead %} coa-letterhead-custom coa-letterhead-custom--{{ coa_letterhead.layout_mode }}{% if coa_letterhead.middle_image %} coa-letterhead-custom--middle{% endif %}{% endif %}" data-page-number="">
   {% if not is_plain_doc %}
-  <div class="coa-page-brand coa-page-brand--header" aria-hidden="true" style="background-image:url('{% if is_test_report %}{% static 'img/arlpl_lh.png' %}{% else %}{% static 'img/arlpl_form_39_lh.png' %}{% endif %}');"></div>
-  <div class="coa-page-brand coa-page-brand--footer" aria-hidden="true" style="background-image:url('{% if is_test_report %}{% static 'img/arlpl_lf.png' %}{% else %}{% static 'img/arlpl_form_39_lf.png' %}{% endif %}');"></div>
+  {% if coa_letterhead.layout_mode == 'full' and coa_letterhead.full_image %}
+  <div class="coa-page-brand coa-page-brand--full" aria-hidden="true" style="background-image:url('{{ coa_letterhead.full_image.url }}');"></div>
+  {% else %}
+  <div class="coa-page-brand coa-page-brand--header" aria-hidden="true" style="background-image:url('{% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.header_image %}{{ coa_letterhead.header_image.url }}{% elif is_test_report %}{% static 'img/arlpl_lh.png' %}{% else %}{% static 'img/arlpl_form_39_lh.png' %}{% endif %}');"></div>
+  <div class="coa-page-brand coa-page-brand--footer" aria-hidden="true" style="background-image:url('{% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.footer_image %}{{ coa_letterhead.footer_image.url }}{% elif is_test_report %}{% static 'img/arlpl_lf.png' %}{% else %}{% static 'img/arlpl_form_39_lf.png' %}{% endif %}');"></div>
+  {% endif %}
   {% endif %}
   <div class="coa-body">
     {% if not is_plain_doc %}
-    <div class="coa-page-watermark coa-page-watermark--middle" aria-hidden="true"></div>
+    <div class="coa-page-watermark coa-page-watermark--middle"{% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.middle_image %} style="background-image:url('{{ coa_letterhead.middle_image.url }}');"{% endif %} aria-hidden="true"></div>
     {% endif %}
     {% if report.final_outcome == 'draft' %}
       <div class="coa-draft-watermark">DRAFT</div>
@@ -76,14 +80,18 @@
   </div>
 </div>
 {% else %}
-<div class="coa-print-wrapper {% if is_plain_doc %}coa-plain{% else %}coa-report-sheet{% endif %} {% if is_test_report %}coa-test-report{% else %}coa-coa-report{% endif %}">
+<div class="coa-print-wrapper {% if is_plain_doc %}coa-plain{% else %}coa-report-sheet{% endif %} {% if is_test_report %}coa-test-report{% else %}coa-coa-report{% endif %}{% if coa_letterhead %} coa-letterhead-custom coa-letterhead-custom--{{ coa_letterhead.layout_mode }}{% if coa_letterhead.middle_image %} coa-letterhead-custom--middle{% endif %}{% endif %}">
   {% if not is_plain_doc %}
-  <div class="coa-page-brand coa-page-brand--header" aria-hidden="true" style="background-image:url('{% if is_test_report %}{% static 'img/arlpl_lh.png' %}{% else %}{% static 'img/arlpl_form_39_lh.png' %}{% endif %}');"></div>
-  <div class="coa-page-brand coa-page-brand--footer" aria-hidden="true" style="background-image:url('{% if is_test_report %}{% static 'img/arlpl_lf.png' %}{% else %}{% static 'img/arlpl_form_39_lf.png' %}{% endif %}');"></div>
+  {% if coa_letterhead.layout_mode == 'full' and coa_letterhead.full_image %}
+  <div class="coa-page-brand coa-page-brand--full" aria-hidden="true" style="background-image:url('{{ coa_letterhead.full_image.url }}');"></div>
+  {% else %}
+  <div class="coa-page-brand coa-page-brand--header" aria-hidden="true" style="background-image:url('{% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.header_image %}{{ coa_letterhead.header_image.url }}{% elif is_test_report %}{% static 'img/arlpl_lh.png' %}{% else %}{% static 'img/arlpl_form_39_lh.png' %}{% endif %}');"></div>
+  <div class="coa-page-brand coa-page-brand--footer" aria-hidden="true" style="background-image:url('{% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.footer_image %}{{ coa_letterhead.footer_image.url }}{% elif is_test_report %}{% static 'img/arlpl_lf.png' %}{% else %}{% static 'img/arlpl_form_39_lf.png' %}{% endif %}');"></div>
+  {% endif %}
   {% endif %}
   <div class="coa-body">
     {% if not is_plain_doc %}
-    <div class="coa-page-watermark coa-page-watermark--middle" aria-hidden="true"></div>
+    <div class="coa-page-watermark coa-page-watermark--middle"{% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.middle_image %} style="background-image:url('{{ coa_letterhead.middle_image.url }}');"{% endif %} aria-hidden="true"></div>
     {% endif %}
     {% if report.final_outcome == 'draft' %}
       <div class="coa-draft-watermark">DRAFT</div>

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
+from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
 
 
 @admin.register(ReportRemark)
@@ -24,8 +24,14 @@ class ReportTemplateAdmin(admin.ModelAdmin):
     search_fields = ("name", "description", "content")
 
 
+@admin.register(COALetterhead)
+class COALetterheadAdmin(admin.ModelAdmin):
+    list_display = ("name", "layout_mode", "is_active", "updated_at")
+    readonly_fields = ("updated_at",)
+
+
 @admin.register(TDSDocumentTemplate)
 class TDSDocumentTemplateAdmin(admin.ModelAdmin):
-    list_display = ("name", "document_type", "test", "is_active", "updated_at")
-    list_filter = ("document_type", "is_active", "test")
+    list_display = ("name", "document_type", "test", "display_mode", "is_active", "updated_at")
+    list_filter = ("document_type", "display_mode", "is_active", "test")
     search_fields = ("name", "description", "content", "test__name")

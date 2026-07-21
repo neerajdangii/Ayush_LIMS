@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.paginator import Paginator
 from django.db import DatabaseError
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.deletion import ProtectedError
 from django.http import JsonResponse
 from django.http.response import Http404
@@ -45,23 +45,56 @@ MASTER_CONFIG = {
         "form": CustomerMasterForm,
         "title": "Customer Master",
         "detail_attr": "address",
+        "search_fields": ("name", "address"),
     },
-    "submitter": {"model": SubmitterMaster, "form": SubmitterMasterForm, "title": "Submitter Master"},
-    "manufacturer": {"model": ManufacturerMaster, "form": ManufacturerMasterForm, "title": "Manufacturer Master"},
+    "submitter": {
+        "model": SubmitterMaster,
+        "form": SubmitterMasterForm,
+        "title": "Submitter Master",
+        "search_fields": ("name",),
+    },
+    "manufacturer": {
+        "model": ManufacturerMaster,
+        "form": ManufacturerMasterForm,
+        "title": "Manufacturer Master",
+        "search_fields": ("name",),
+    },
     "sample-name": {
         "model": SampleNameMaster,
         "form": SampleNameMasterForm,
         "title": "Sample Name Master",
         "detail_attr": "generic_name",
+        "search_fields": (
+            "name",
+            "generic_name",
+            "sample_type",
+            "discipline",
+            "test_group",
+            "method",
+            "customer",
+            "description",
+            "limits",
+        ),
     },
     "test": {
         "model": TestMaster,
         "form": TestMasterForm,
         "title": "Test Master",
         "detail_attr": "report_template",
+        "search_fields": ("name", "report_template__name"),
     },
-    "protocol": {"model": ProtocolMaster, "form": ProtocolMasterForm, "title": "Protocol Master"},
-    "uom": {"model": UOMMaster, "form": UOMMasterForm, "title": "UOM Master"},
+    "protocol": {
+        "model": ProtocolMaster,
+        "form": ProtocolMasterForm,
+        "title": "Protocol Master",
+        "search_fields": ("name",),
+    },
+    "uom": {
+        "model": UOMMaster,
+        "form": UOMMasterForm,
+        "title": "UOM Master",
+        "search_fields": ("name",),
+    },
     "remark": {
         "model": ReportRemark,
         "form": ReportRemarkMasterForm,
@@ -69,6 +102,7 @@ MASTER_CONFIG = {
         "order_by": ("sort_order", "title"),
         "primary_attr": "title",
         "detail_attr": "content",
+        "search_fields": ("title", "content"),
     },
 }
 INLINE_ALLOWED_MASTERS = {"customer", "submitter", "manufacturer", "sample-name", "test", "uom", "protocol"}
@@ -96,7 +130,6 @@ class BookingCreateView(RoleRequiredMixin, PermissionRequiredMixin, CreateView):
     model = Booking
     form_class = BookingForm
     template_name = "bookings/booking_form.html"
-    success_url = reverse_lazy("bookings:list")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -155,13 +188,10 @@ class BookingCreateView(RoleRequiredMixin, PermissionRequiredMixin, CreateView):
                 "Database schema is not up to date. Please run migrations and try again.",
             )
             return redirect("bookings:create")
-        duplicate_id = self.request.GET.get("duplicate")
-        if duplicate_id:
-            messages.success(self.request, "Booking duplicated successfully. You can edit and save.")
-        else:
-            messages.success(self.request, "Booking created successfully.")
-        messages.info(self.request, f"Booking ID: {self.object.tracking_code}. Copy this ID to search quickly.")
         return response
+
+    def get_success_url(self):
+        return f"{reverse('bookings:list')}?saved=1&booking_id={self.object.tracking_code}"
 
 
 class BookingUpdateView(RoleRequiredMixin, PermissionRequiredMixin, UpdateView):
@@ -170,7 +200,6 @@ class BookingUpdateView(RoleRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = Booking
     form_class = BookingForm
     template_name = "bookings/booking_form.html"
-    success_url = reverse_lazy("bookings:list")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -189,9 +218,10 @@ class BookingUpdateView(RoleRequiredMixin, PermissionRequiredMixin, UpdateView):
                 "Database schema is not up to date. Please run migrations and try again.",
             )
             return redirect("bookings:list")
-        messages.success(self.request, "Booking updated successfully.")
-        messages.info(self.request, f"Booking ID: {self.object.tracking_code}. Copy this ID to search quickly.")
         return response
+
+    def get_success_url(self):
+        return f"{reverse('bookings:list')}?saved=1&booking_id={self.object.tracking_code}"
 
 
 class BookingListView(LoginRequiredMixin, ListView):
@@ -202,8 +232,16 @@ class BookingListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = (
-            Booking.objects.select_related("customer", "sample_name", "created_by", "updated_by", "approved_by", "report")
+            Booking.objects.select_related("customer", "sample_name", "created_by", "updated_by", "approved_by")
             .prefetch_related("test_to_be_performed")
+            .annotate(
+                is_reported_for_list=Exists(
+                    Report.objects.filter(
+                        booking_id=OuterRef("pk"),
+                        status__in=[Report.Status.MANAGER_APPROVED, Report.Status.INCHARGE_APPROVED],
+                    )
+                )
+            )
             .order_by("-created_at")
         )
         search = self.request.GET.get("q", "").strip()
@@ -243,6 +281,8 @@ class BookingListView(LoginRequiredMixin, ListView):
         context["status_filter"] = self.request.GET.get("status", "").strip()
         context["customer_filter"] = self.request.GET.get("customer", "").strip()
         context["customer_options"] = CustomerMaster.objects.order_by("name")
+        context["show_saved_popup"] = self.request.GET.get("saved") == "1"
+        context["saved_booking_id"] = self.request.GET.get("booking_id", "").strip()
         if context.get("is_paginated"):
             context["page_numbers"] = context["page_obj"].paginator.get_elided_page_range(
                 context["page_obj"].number,
@@ -329,6 +369,12 @@ class MasterListView(LoginRequiredMixin, TemplateView):
             raise Http404("Invalid master type")
         order_by = conf.get("order_by", ("name",))
         queryset = conf["model"].objects.order_by(*order_by)
+        search_query = self.request.GET.get("q", "").strip()
+        if search_query:
+            search_filter = Q()
+            for field in conf.get("search_fields", ("name",)):
+                search_filter |= Q(**{f"{field}__icontains": search_query})
+            queryset = queryset.filter(search_filter)
         paginator = Paginator(queryset, 20)
         page_obj = paginator.get_page(self.request.GET.get("page"))
         primary_attr = conf.get("primary_attr", "name")
@@ -351,12 +397,21 @@ class MasterListView(LoginRequiredMixin, TemplateView):
                 "object_list": page_obj.object_list,
                 "rows": rows,
                 "can_inline": slug in INLINE_ALLOWED_MASTERS,
+                "search_query": search_query,
             }
         )
         return context
 
 
-class MasterCreateView(RoleRequiredMixin, PermissionRequiredMixin, CreateView):
+class MasterPermissionAccessMixin(RoleRequiredMixin):
+    def test_func(self):
+        if super().test_func():
+            return True
+        permission_required = getattr(self, "permission_required", "")
+        return bool(permission_required and self.request.user.has_perm(permission_required))
+
+
+class MasterCreateView(MasterPermissionAccessMixin, PermissionRequiredMixin, CreateView):
     required_roles = ("Admin", "Manager")
     permission_required = "bookings.add_customermaster"
     template_name = "bookings/master_form.html"
@@ -383,7 +438,7 @@ class MasterCreateView(RoleRequiredMixin, PermissionRequiredMixin, CreateView):
         return reverse("bookings:master_list", kwargs={"slug": self.slug})
 
 
-class MasterUpdateView(RoleRequiredMixin, PermissionRequiredMixin, UpdateView):
+class MasterUpdateView(MasterPermissionAccessMixin, PermissionRequiredMixin, UpdateView):
     required_roles = ("Admin", "Manager")
     permission_required = "bookings.change_customermaster"
     template_name = "bookings/master_form.html"
@@ -410,7 +465,7 @@ class MasterUpdateView(RoleRequiredMixin, PermissionRequiredMixin, UpdateView):
         return reverse("bookings:master_list", kwargs={"slug": self.slug})
 
 
-class MasterDeleteView(RoleRequiredMixin, PermissionRequiredMixin, DeleteView):
+class MasterDeleteView(MasterPermissionAccessMixin, PermissionRequiredMixin, DeleteView):
     required_roles = ("Admin", "Manager")
     permission_required = "bookings.delete_customermaster"
     template_name = "bookings/master_confirm_delete.html"

@@ -60,7 +60,7 @@
       <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
           <div>
-            <h5 class="mb-1">#{{ booking.tracking_code }} ~ {{ booking.sample_name.display_name|default:"N.A" }} ~ {{ booking.sample_reg_no|default:"N.A" }}</h5>
+            <h5 class="mb-1">#{{ booking.tracking_code }} ~ {{ booking.sample_name.display_name|default:"N.A" }} ~ {{ booking.sample_registration_no|default:"N.A" }}</h5>
             {% if booking.is_reported %}
             <span class="badge text-bg-success" id="bookingStatusBadge">Approved</span>
             {% elif booking.status == 'approved' %}
@@ -82,7 +82,6 @@
               {% endif %}
               {% if report %}
                 {% if user|has_any_role:"Manager,Incharge,Analyst,Admin" %}
-                <a class="btn btn-sm btn-outline-primary" href="{% url 'reports:coa_edit' report.pk %}">Make Report</a>
                 <a class="btn btn-sm btn-outline-dark" href="{% url 'reports:coa_print' report.pk %}">View Report</a>
                 {% endif %}
               {% endif %}
@@ -92,7 +91,7 @@
                 {% csrf_token %}
                 <button class="btn btn-sm btn-success" type="submit">Assign</button>
               </form>
-              <a class="btn btn-sm btn-primary d-none" id="bookingReportLink" href="{% url 'reports:approval' booking.pk %}">Report</a>
+              <a class="d-none" id="bookingReportLink" href="{% url 'reports:approval' booking.pk %}">Report</a>
               {% endif %}
             {% endif %}
           </div>
@@ -117,7 +116,7 @@
           </div>
           <div class="booking-info-row booking-info-row--band">
             <div>Sample Reg.No.<br>ULR No.</div>
-            <div>{{ booking.sample_reg_no|default:"N.A" }}<br>N.A</div>
+            <div>{{ booking.sample_registration_no|default:"N.A" }}<br>N.A</div>
           </div>
           <div class="booking-info-row">
             <div>Discipline<br>Testgroup<br>Testtype</div>
@@ -215,6 +214,11 @@
     assignForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       const submitButton = assignForm.querySelector('button[type="submit"]');
+      if (assignForm.dataset.assigned === 'true') {
+        window.location.href = reportLink.href;
+        return;
+      }
+
       if (submitButton) {
         submitButton.disabled = true;
         submitButton.textContent = 'Assigning...';
@@ -240,8 +244,13 @@
       if (data.report_url) {
         reportLink.href = data.report_url;
       }
-      assignForm.classList.add('d-none');
-      reportLink.classList.remove('d-none');
+      assignForm.dataset.assigned = 'true';
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.classList.remove('btn-success');
+        submitButton.classList.add('btn-primary');
+        submitButton.textContent = 'Report';
+      }
       if (statusBadge) {
         statusBadge.classList.remove('text-bg-warning');
         statusBadge.classList.add('text-bg-primary');

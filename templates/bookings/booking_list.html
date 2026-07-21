@@ -2,6 +2,12 @@
 {% load report_extras %}
 {% block title %}Bookings | LIMS{% endblock %}
 {% block content %}
+{% if show_saved_popup and saved_booking_id %}
+<div class="page-save-popup" role="status">
+  <strong>Booking updated successfully</strong>
+  <span>Booking ID: {{ saved_booking_id }}</span>
+</div>
+{% endif %}
 <div class="card shadow-sm">
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5 class="mb-0">Bookings</h5>
@@ -64,7 +70,7 @@
           {% for b in bookings %}
           <tr>
             <td>
-              {{ b.sample_reg_no }}
+              {{ b.sample_registration_no }}
               {% if b.batch_no %}
               <div class="text-muted small">Batch: {{ b.batch_no }}</div>
               {% endif %}
@@ -84,7 +90,7 @@
             <td>{{ b.sample_name.display_name }}</td>
             <td>{{ b.get_booking_type_display }}</td>
             <td>
-              {% if b.is_reported %}
+              {% if b.is_reported_for_list %}
               <span class="badge text-bg-success">Approved</span>
               {% elif b.status == 'approved' %}
               <span class="badge text-bg-primary">Assigned</span>

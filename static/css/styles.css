@@ -210,8 +210,9 @@ body::before {
 }
 
 .page-save-popup {
-  width: min(1600px, 98vw);
-  margin: 0 auto 16px;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 16px;
   padding: 12px 16px;
   border: 1px solid #86efac;
   background: #f0fdf4;

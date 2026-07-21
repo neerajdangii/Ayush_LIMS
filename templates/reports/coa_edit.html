@@ -48,7 +48,7 @@
 <div class="topbar coa-edit-topbar no-print">
   <div>
     <strong>COA Edit</strong>
-    <div class="sub">Sample: {{ object.booking.sample_reg_no }}</div>
+    <div class="sub">Sample: {{ object.booking.sample_registration_no }}</div>
   </div>
 
   <div class="nav">
@@ -70,12 +70,12 @@
     </div>
     <div class="tracking-banner__history">
       <div class="label">Sample Reg. No.</div>
-      <code class="tracking-banner__value">{{ object.booking.sample_reg_no }}</code>
+      <code class="tracking-banner__value">{{ object.booking.sample_registration_no }}</code>
     </div>
   </div>
   <div class="coa-summary is-hidden" id="coa-summary">
     <div><span>Certificate No.</span>{{ object.certificate_no }}</div>
-    <div><span>Sample Reg No.</span>{{ object.booking.sample_reg_no }}</div>
+    <div><span>Sample Reg No.</span>{{ object.booking.sample_registration_no }}</div>
     <div><span>Sample Name</span>{{ object.booking.sample_name.display_name }}</div>
     <div><span>Customer</span>{{ object.booking.customer.name }}</div>
     <div><span>Analysis Start</span>{{ object.booking.analysis_start_date|date:"d/m/Y" }}</div>

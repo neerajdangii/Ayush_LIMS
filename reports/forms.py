@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from .models import Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
+from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
 from .template_library import build_generic_result_table, populate_main_table_rows
 
 DATE_FORMAT_DMY = "%d/%m/%Y"
@@ -16,6 +16,84 @@ DATE_INPUT_FORMAT = "%Y-%m-%d"
 DATE_PLACEHOLDER = "DD/MM/YYYY"
 
 WORD_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+WORD_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _word_attr(element, name):
+    return element.get(f"{WORD_W}{name}") if element is not None else None
+
+
+def _css_style(style_parts):
+    style = ";".join(part for part in style_parts if part)
+    return f' style="{style}"' if style else ""
+
+
+def _twips_to_pt(value):
+    try:
+        return round(int(value) / 20, 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_docx_run_html(run):
+    text_parts = []
+    for child in run:
+        tag_name = child.tag.rsplit("}", 1)[-1]
+        if tag_name == "t":
+            text_parts.append(escape(child.text or ""))
+        elif tag_name == "tab":
+            text_parts.append("&emsp;")
+        elif tag_name == "br":
+            text_parts.append("<br>")
+
+    text = "".join(text_parts)
+    if not text:
+        return ""
+
+    props = run.find("w:rPr", WORD_NS)
+    if props is not None:
+        if props.find("w:b", WORD_NS) is not None:
+            text = f"<strong>{text}</strong>"
+        if props.find("w:i", WORD_NS) is not None:
+            text = f"<em>{text}</em>"
+        if props.find("w:u", WORD_NS) is not None:
+            text = f"<u>{text}</u>"
+    return text
+
+
+def _extract_docx_paragraph_html(paragraph):
+    props = paragraph.find("w:pPr", WORD_NS)
+    style_parts = []
+    if props is not None:
+        jc = props.find("w:jc", WORD_NS)
+        align = _word_attr(jc, "val")
+        if align in {"center", "right", "both"}:
+            style_parts.append(f"text-align:{'justify' if align == 'both' else align}")
+
+        spacing = props.find("w:spacing", WORD_NS)
+        before = _twips_to_pt(_word_attr(spacing, "before"))
+        after = _twips_to_pt(_word_attr(spacing, "after"))
+        line = _word_attr(spacing, "line")
+        line_rule = _word_attr(spacing, "lineRule")
+        if before is not None:
+            style_parts.append(f"margin-top:{before}pt")
+        if after is not None:
+            style_parts.append(f"margin-bottom:{after}pt")
+        if line:
+            try:
+                line_value = int(line)
+                if line_rule in {"exact", "atLeast"}:
+                    style_parts.append(f"line-height:{round(line_value / 20, 2)}pt")
+                else:
+                    style_parts.append(f"line-height:{round(line_value / 240, 2)}")
+            except ValueError:
+                pass
+
+    runs = [_extract_docx_run_html(run) for run in paragraph.findall("w:r", WORD_NS)]
+    content = "".join(runs).strip()
+    if not content:
+        content = "&nbsp;"
+    return f"<p{_css_style(style_parts)}>{content}</p>"
 
 
 def _extract_docx_printable_html(uploaded_file):
@@ -31,23 +109,33 @@ def _extract_docx_printable_html(uploaded_file):
     for child in body:
         tag_name = child.tag.rsplit("}", 1)[-1]
         if tag_name == "p":
-            text = "".join(node.text or "" for node in child.findall(".//w:t", WORD_NS)).strip()
-            if text:
-                blocks.append(f"<p>{escape(text)}</p>")
+            blocks.append(_extract_docx_paragraph_html(child))
         elif tag_name == "tbl":
+            table_props = child.find("w:tblPr", WORD_NS)
+            table_width = None
+            if table_props is not None:
+                width = table_props.find("w:tblW", WORD_NS)
+                if _word_attr(width, "type") == "pct":
+                    try:
+                        table_width = f"width:{round(int(_word_attr(width, 'w')) / 50, 2)}%"
+                    except (TypeError, ValueError):
+                        table_width = None
             rows = []
             for row in child.findall(".//w:tr", WORD_NS):
                 cells = []
                 for cell in row.findall("./w:tc", WORD_NS):
-                    cell_text = " ".join(
-                        "".join(node.text or "" for node in para.findall(".//w:t", WORD_NS)).strip()
-                        for para in cell.findall("./w:p", WORD_NS)
-                    ).strip()
-                    cells.append(f"<td>{escape(cell_text)}</td>")
+                    cell_props = cell.find("w:tcPr", WORD_NS)
+                    grid_span = cell_props.find("w:gridSpan", WORD_NS) if cell_props is not None else None
+                    colspan = _word_attr(grid_span, "val")
+                    colspan_attr = f' colspan="{escape(colspan)}"' if colspan else ""
+                    cell_blocks = [_extract_docx_paragraph_html(para) for para in cell.findall("./w:p", WORD_NS)]
+                    cell_content = "".join(cell_blocks) or "&nbsp;"
+                    cells.append(f"<td{colspan_attr}>{cell_content}</td>")
                 if cells:
                     rows.append(f"<tr>{''.join(cells)}</tr>")
             if rows:
-                blocks.append(f"<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\"><tbody>{''.join(rows)}</tbody></table>")
+                table_style = _css_style(["border-collapse:collapse", table_width or "width:100%"])
+                blocks.append(f"<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\"{table_style}><tbody>{''.join(rows)}</tbody></table>")
     return "\n".join(blocks)
 
 
@@ -291,7 +379,14 @@ class COAEditForm(forms.ModelForm):
 
     class Meta:
         model = Report
-        fields = ["report_template", "ceo_content", "final_outcome", "selected_remarks", "selected_remark", "remark_text"]
+        fields = [
+            "report_template",
+            "ceo_content",
+            "final_outcome",
+            "selected_remarks",
+            "selected_remark",
+            "remark_text",
+        ]
         widgets = {
             "report_template": forms.Select(attrs={"class": "form-select", "id": "id_report_template"}),
             "ceo_content": forms.Textarea(
@@ -353,15 +448,77 @@ class ReportTemplateForm(forms.ModelForm):
         return content.strip() if isinstance(content, str) else content
 
 
+class COALetterheadForm(forms.ModelForm):
+    IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+    class Meta:
+        model = COALetterhead
+        fields = ["layout_mode", "full_image", "header_image", "middle_image", "footer_image", "is_active"]
+        widgets = {
+            "layout_mode": forms.Select(attrs={"class": "form-select"}),
+            "full_image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "header_image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "middle_image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "footer_image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "layout_mode": "Letterhead Option",
+            "full_image": "Full Page Letterhead",
+            "header_image": "Header Image",
+            "middle_image": "Middle Watermark / Body Image",
+            "footer_image": "Footer Image",
+            "is_active": "Use uploaded letterhead",
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        mode = cleaned_data.get("layout_mode")
+
+        for field_name in ("full_image", "header_image", "middle_image", "footer_image"):
+            uploaded = cleaned_data.get(field_name)
+            if uploaded and Path(uploaded.name or "").suffix.lower() not in self.IMAGE_EXTENSIONS:
+                self.add_error(field_name, "Upload an image file: JPG, PNG, WEBP, or GIF.")
+
+        def current_file(field_name):
+            value = cleaned_data.get(field_name)
+            if value is False:
+                return None
+            return value or getattr(self.instance, field_name, None)
+
+        if mode == COALetterhead.LayoutMode.FULL:
+            full_image = current_file("full_image")
+            if not full_image:
+                raise forms.ValidationError("Upload a full page letterhead image, or choose the default option.")
+        if mode == COALetterhead.LayoutMode.PARTS:
+            has_part = any(
+                current_file(field)
+                for field in ("header_image", "middle_image", "footer_image")
+            )
+            if not has_part:
+                raise forms.ValidationError("Upload at least one header, middle, or footer image, or choose the default option.")
+        return cleaned_data
+
+
 class TDSDocumentTemplateForm(forms.ModelForm):
     class Meta:
         model = TDSDocumentTemplate
-        fields = ["document_type", "name", "test", "description", "content", "source_file", "is_active"]
+        fields = [
+            "document_type",
+            "name",
+            "test",
+            "description",
+            "display_mode",
+            "content",
+            "source_file",
+            "is_active",
+        ]
         widgets = {
             "document_type": forms.Select(attrs={"class": "form-select"}),
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "test": forms.Select(attrs={"class": "form-select"}),
             "description": forms.TextInput(attrs={"class": "form-control"}),
+            "display_mode": forms.Select(attrs={"class": "form-select"}),
             "content": forms.Textarea(
                 attrs={
                     "class": "form-control tinymce-editor",
@@ -374,20 +531,24 @@ class TDSDocumentTemplateForm(forms.ModelForm):
         }
         labels = {
             "test": "Test link for ADS",
+            "display_mode": "Display Option",
             "content": "Printable Content",
             "source_file": "Word/PDF Source File",
         }
 
     def clean(self):
         cleaned_data = super().clean()
-        document_type = cleaned_data.get("document_type")
-        test = cleaned_data.get("test")
+        display_mode = cleaned_data.get("display_mode") or TDSDocumentTemplate.DisplayMode.EDITABLE
         content = (cleaned_data.get("content") or "").strip()
         source_file = cleaned_data.get("source_file") or getattr(self.instance, "source_file", None)
         uploaded_file = cleaned_data.get("source_file")
 
-        if document_type == TDSDocumentTemplate.DocumentType.ADS and not test:
-            raise forms.ValidationError("ADS templates should be linked with a test.")
+        if display_mode == TDSDocumentTemplate.DisplayMode.SOURCE_FILE:
+            if not source_file:
+                raise forms.ValidationError("Upload a Word/PDF/HTML/TXT file for direct display mode.")
+            cleaned_data["content"] = content
+            return cleaned_data
+
         if not content and uploaded_file:
             content = _extract_uploaded_printable_content(uploaded_file)
             if not content:

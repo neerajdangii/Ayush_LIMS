@@ -22,6 +22,18 @@
       <a href="{% url 'bookings:master_list' 'remark' %}" class="btn btn-outline-dark btn-sm">Remark</a>
     </div>
 
+    <form method="get" class="row g-2 mb-3">
+      <div class="col-md-8 col-lg-6">
+        <input type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Search {{ title|lower }}...">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-outline-primary w-100" type="submit">Search</button>
+      </div>
+      <div class="col-md-2">
+        <a href="{% url 'bookings:master_list' master_slug %}" class="btn btn-outline-secondary w-100">Reset</a>
+      </div>
+    </form>
+
     <div class="table-responsive">
       <table class="table table-bordered table-striped">
         <thead class="table-light">
@@ -67,10 +79,10 @@
       <ul class="pagination justify-content-center">
         {% if page_obj.has_previous %}
         <li class="page-item">
-          <a class="page-link" href="?page=1">First</a>
+          <a class="page-link" href="?{% if search_query %}q={{ search_query|urlencode }}&{% endif %}page=1">First</a>
         </li>
         <li class="page-item">
-          <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+          <a class="page-link" href="?{% if search_query %}q={{ search_query|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
         </li>
         {% else %}
         <li class="page-item disabled">
@@ -88,17 +100,17 @@
           </li>
           {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
           <li class="page-item">
-            <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+            <a class="page-link" href="?{% if search_query %}q={{ search_query|urlencode }}&{% endif %}page={{ num }}">{{ num }}</a>
           </li>
           {% endif %}
         {% endfor %}
 
         {% if page_obj.has_next %}
         <li class="page-item">
-          <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+          <a class="page-link" href="?{% if search_query %}q={{ search_query|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
         </li>
         <li class="page-item">
-          <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last</a>
+          <a class="page-link" href="?{% if search_query %}q={{ search_query|urlencode }}&{% endif %}page={{ page_obj.paginator.num_pages }}">Last</a>
         </li>
         {% else %}
         <li class="page-item disabled">

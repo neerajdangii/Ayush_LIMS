@@ -4,11 +4,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>{{ document_title }} | {{ report.booking.sample_reg_no }}</title>
+  <title>{{ document_title }} | {{ report.booking.sample_registration_no }}</title>
   <link rel="stylesheet" href="{% static 'css/coa.css' %}?v=20260416-1">
   {% block extra_head %}{% endblock %}
 </head>
-<body class="coa-standalone">
+<body class="coa-standalone{% if is_pdf_render %} coa-pdf-render{% endif %}">
   {% block toolbar %}{% endblock %}
   {% block content %}
   <div class="coa-print-page">

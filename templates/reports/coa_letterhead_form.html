@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}COA Letterhead | LIMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="mb-1">COA Letterhead</h3>
+    <div class="text-muted">Upload a full letterhead, or replace only the header, middle watermark, and footer.</div>
+  </div>
+  <a href="{% url 'reports:template_list' %}" class="btn btn-outline-secondary">Back to Templates</a>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card shadow-sm">
+  {% csrf_token %}
+  <div class="card-body">
+    {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="{{ form.layout_mode.id_for_label }}">{{ form.layout_mode.label }}</label>
+        {{ form.layout_mode }}
+        <div class="form-text">Default keeps the current COA letterhead. Full uses one complete page image. Header / Middle / Footer replaces only the uploaded parts.</div>
+        {{ form.layout_mode.errors }}
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <div class="form-check mb-2">
+          {{ form.is_active }}
+          <label class="form-check-label" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+        </div>
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="{{ form.full_image.id_for_label }}">{{ form.full_image.label }}</label>
+        {{ form.full_image }}
+        <div class="form-text">Use this when your letterhead is one full A4 page image.</div>
+        {{ form.full_image.errors }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="{{ form.header_image.id_for_label }}">{{ form.header_image.label }}</label>
+        {{ form.header_image }}
+        <div class="form-text">Replaces the current top letterhead image.</div>
+        {{ form.header_image.errors }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="{{ form.middle_image.id_for_label }}">{{ form.middle_image.label }}</label>
+        {{ form.middle_image }}
+        <div class="form-text">Replaces the current middle watermark/background.</div>
+        {{ form.middle_image.errors }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="{{ form.footer_image.id_for_label }}">{{ form.footer_image.label }}</label>
+        {{ form.footer_image }}
+        <div class="form-text">Replaces the current bottom footer image.</div>
+        {{ form.footer_image.errors }}
+      </div>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex justify-content-end gap-2">
+    <a href="{% url 'reports:template_list' %}" class="btn btn-outline-secondary">Cancel</a>
+    <button type="submit" class="btn btn-primary">Save Letterhead</button>
+  </div>
+</form>
+{% endblock %}

@@ -170,6 +170,46 @@ class Booking(models.Model):
     def booking_type_code(self) -> str:
         return "REG" if self.booking_type == self.BookingType.REGULATORY else "GEN"
 
+    @property
+    def certificate_no(self) -> str:
+        source_date = self.sample_receipt_date or self.booking_date
+        if not source_date:
+            return "-"
+
+        if hasattr(source_date, "tzinfo") and timezone.is_aware(source_date):
+            source_date = timezone.localtime(source_date)
+
+        reg_no = self.sample_reg_no or ""
+        try:
+            sequence = int(reg_no.rsplit("/", 1)[-1])
+        except (TypeError, ValueError):
+            try:
+                sequence = int(self.tracking_code)
+            except (TypeError, ValueError):
+                sequence = self.pk or 1
+
+        return f"ARL/{self.booking_type_code}/{source_date.strftime('%y%m%d')}{sequence:03d}"
+
+    @property
+    def sample_registration_no(self) -> str:
+        source_date = self.sample_receipt_date or self.booking_date
+        if not source_date:
+            return "-"
+
+        if hasattr(source_date, "tzinfo") and timezone.is_aware(source_date):
+            source_date = timezone.localtime(source_date)
+
+        reg_no = self.sample_reg_no or ""
+        try:
+            sequence = int(reg_no.rsplit("/", 1)[-1])
+        except (TypeError, ValueError):
+            try:
+                sequence = int(self.tracking_code)
+            except (TypeError, ValueError):
+                sequence = self.pk or 1
+
+        return f"ARLPL/R/{source_date.strftime('%d-%m-%Y')}/{sequence:04d}"
+
     @classmethod
     def _next_sequence(cls, booking_date, booking_type):
         year = booking_date.year

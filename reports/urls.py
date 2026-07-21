@@ -2,7 +2,8 @@ from django.urls import path
 
 from .views import (
     COAEditView,
-    COAPDFView,
+    COALetterheadUpdateView,
+    COAOptionView,
     COAPlainDocumentView,
     COAPrintView,
     BookingTDSDocumentView,
@@ -31,6 +32,7 @@ urlpatterns = [
     path("api/<int:pk>/", ReportApiDetailView.as_view(), name="report_api_detail"),
     path("templates/", ReportTemplateListView.as_view(), name="template_list"),
     path("templates/add/", ReportTemplateCreateView.as_view(), name="template_add"),
+    path("templates/coa-letterhead/", COALetterheadUpdateView.as_view(), name="coa_letterhead"),
     path("templates/<int:pk>/content/", ReportTemplateContentView.as_view(), name="template_content"),
     path("templates/<int:pk>/edit/", ReportTemplateUpdateView.as_view(), name="template_edit"),
     path("templates/<int:pk>/delete/", ReportTemplateDeleteView.as_view(), name="template_delete"),
@@ -41,9 +43,9 @@ urlpatterns = [
     path("tds/templates/<int:pk>/delete/", TDSDocumentTemplateDeleteView.as_view(), name="tds_template_delete"),
     path("booking/<int:booking_pk>/tds/<slug:document_type>/", BookingTDSDocumentView.as_view(), name="booking_tds_document"),
     path("booking/<int:booking_pk>/", ReportCreateOrUpdateView.as_view(), name="approval"),
+    path("<int:pk>/coa/", COAOptionView.as_view(), name="coa_options"),
     path("<int:pk>/coa/edit/", COAEditView.as_view(), name="coa_edit"),
     path("<int:pk>/coa/print/", COAPrintView.as_view(), name="coa_print"),
     path("public/<int:pk>/", PublicCOAPrintView.as_view(), name="coa_public"),
     path("<int:pk>/coa/doc/", COAPlainDocumentView.as_view(), name="coa_doc"),
-    path("<int:pk>/coa/pdf/", COAPDFView.as_view(), name="coa_pdf"),
 ]

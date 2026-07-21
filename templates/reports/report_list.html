@@ -72,7 +72,7 @@
           <td>{{ forloop.counter }}</td>
           <td>{{ r.certificate_no }}</td>
           <td>
-            {{ r.booking.sample_reg_no }}
+            {{ r.booking.sample_registration_no }}
             {% if r.booking.batch_no %}
             <div class="text-muted small">Batch: {{ r.booking.batch_no }}</div>
             {% endif %}
@@ -144,18 +144,4 @@
     {% endif %}
   </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-  (function () {
-    const popup = document.querySelector('.page-save-popup');
-    if (!popup) {
-      return;
-    }
-    setTimeout(() => {
-      popup.classList.add('is-hidden');
-    }, 3500);
-  })();
-</script>
 {% endblock %}
