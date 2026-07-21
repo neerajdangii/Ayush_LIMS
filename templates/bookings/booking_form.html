@@ -1578,14 +1578,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
   
-  // Listen for changes on sample_name and customer fields
-  if (sampleNameSelect) {
-    sampleNameSelect.addEventListener('change', loadPreviousBookingData);
-  }
-  if (customerSelect) {
-    customerSelect.addEventListener('change', loadPreviousBookingData);
-  }
-
   if (bookingForm) {
     bookingForm.addEventListener('submit', () => {
       searchableSelects.forEach((state) => {
