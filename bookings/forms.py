@@ -291,10 +291,13 @@ class MasterForm(forms.ModelForm):
 class CustomerMasterForm(MasterForm):
     class Meta(MasterForm.Meta):
         model = CustomerMaster
-        fields = ["name", "address", "is_active"]
+        fields = ["name", "address", "contact_person", "telephone", "email", "is_active"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "address": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "contact_person": forms.TextInput(attrs={"class": "form-control"}),
+            "telephone": forms.TextInput(attrs={"class": "form-control", "type": "tel"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 

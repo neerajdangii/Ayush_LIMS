@@ -23,6 +23,9 @@ class ActiveMasterModel(models.Model):
 
 class CustomerMaster(ActiveMasterModel):
     address = models.TextField(blank=True)
+    contact_person = models.CharField(max_length=255, blank=True)
+    telephone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
 
 
 class SubmitterMaster(ActiveMasterModel):
@@ -165,6 +168,9 @@ class Booking(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        permissions = [
+            ("view_data_sheet", "Can view Data Sheet"),
+        ]
 
     @property
     def booking_type_code(self) -> str:

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import csv
+from datetime import date
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.paginator import Paginator
 from django.db import DatabaseError
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.deletion import ProtectedError
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.http.response import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
@@ -45,7 +48,7 @@ MASTER_CONFIG = {
         "form": CustomerMasterForm,
         "title": "Customer Master",
         "detail_attr": "address",
-        "search_fields": ("name", "address"),
+        "search_fields": ("name", "address", "contact_person", "telephone", "email"),
     },
     "submitter": {
         "model": SubmitterMaster,
@@ -121,6 +124,157 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             {"slug": slug, "title": conf["title"], "count": conf["model"].objects.count()}
             for slug, conf in MASTER_CONFIG.items()
         ]
+        return context
+
+
+class DataSheetView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
+    permission_required = "bookings.view_data_sheet"
+    template_name = "bookings/data_sheet.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        customer_id = self.request.GET.get("party", "").strip()
+        selected_statuses = self.request.GET.getlist("status")
+        booking_status = self.request.GET.get("booking_status", "").strip()
+        date_from = _parse_filter_date(self.request.GET.get("date_from", ""))
+        date_to = _parse_filter_date(self.request.GET.get("date_to", ""))
+        context["party_customer_id"] = customer_id
+        context["party_selected_statuses"] = selected_statuses
+        context["booking_status"] = booking_status
+        context["date_from"] = date_from.isoformat() if date_from else ""
+        context["date_to"] = date_to.isoformat() if date_to else ""
+        context["booking_status_options"] = Booking.Status.choices
+        context["status_options"] = PARTY_STATUS_OPTIONS
+        context["party_customers"] = CustomerMaster.objects.order_by("name")
+        context["party_report_requested"] = bool(self.request.GET)
+        bookings = _party_pending_bookings(customer_id, selected_statuses, booking_status, date_from, date_to)
+        context["party_pending_bookings"] = bookings if context["party_report_requested"] else []
+        context["party_summary"] = _party_booking_summary(bookings) if context["party_report_requested"] else []
+        context["total_samples"] = len(bookings) if context["party_report_requested"] else 0
+        return context
+
+
+PARTY_STATUS_OPTIONS = (
+    ("assigned", "Assigned"),
+    ("pending", "Pending"),
+    ("draft", "Draft"),
+    ("pass", "Pass"),
+)
+
+
+def _parse_filter_date(value):
+    """Return an ISO date from a filter value, ignoring malformed input."""
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
+
+
+def _party_pending_bookings(customer_id="", statuses=None, booking_status="", date_from=None, date_to=None):
+    """Bookings for an optional party, workflow state, booking state, and date range."""
+    statuses = [status for status in (statuses or []) if status in dict(PARTY_STATUS_OPTIONS)]
+    queryset = (
+        Booking.objects.select_related("customer", "sample_name", "report")
+        .prefetch_related("test_to_be_performed")
+        .order_by("-booking_date", "-pk")
+    )
+    if customer_id:
+        queryset = queryset.filter(customer_id=customer_id)
+    if booking_status in dict(Booking.Status.choices):
+        queryset = queryset.filter(status=booking_status)
+    if date_from:
+        queryset = queryset.filter(booking_date__date__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(booking_date__date__lte=date_to)
+
+    status_filter = Q()
+    if "pending" in statuses:
+        status_filter |= Q(status=Booking.Status.PENDING)
+    if "assigned" in statuses:
+        status_filter |= Q(status=Booking.Status.APPROVED) & (Q(report__isnull=True) | Q(report__status=Report.Status.DRAFT))
+    if "draft" in statuses:
+        status_filter |= Q(report__status=Report.Status.DRAFT)
+    if "pass" in statuses:
+        status_filter |= Q(report__final_outcome=Report.FinalOutcome.PASS)
+    if statuses:
+        queryset = queryset.filter(status_filter).distinct()
+
+    bookings = list(queryset)
+    for booking in bookings:
+        report = getattr(booking, "report", None)
+        if booking.status == Booking.Status.PENDING:
+            booking.party_status = "Pending"
+        elif report and report.final_outcome == Report.FinalOutcome.PASS:
+            booking.party_status = "Pass"
+        elif report and report.status == Report.Status.DRAFT:
+            booking.party_status = "Draft"
+        else:
+            booking.party_status = "Assigned"
+    return bookings
+
+
+def _party_booking_summary(bookings):
+    """Group the selected booking list into party-wise sample totals."""
+    totals = {}
+    for booking in bookings:
+        party_name = booking.customer.name if booking.customer_id else "Unassigned Party"
+        totals[party_name] = totals.get(party_name, 0) + 1
+    return [
+        {"party_name": party_name, "sample_count": sample_count}
+        for party_name, sample_count in sorted(totals.items(), key=lambda item: (-item[1], item[0].lower()))
+    ]
+
+
+class PartyPendingExcelView(LoginRequiredMixin, View):
+    """Download the selected party's pending bookings in an Excel-compatible CSV."""
+
+    def get(self, request):
+        customer_id = request.GET.get("party", "").strip()
+        statuses = request.GET.getlist("status")
+        booking_status = request.GET.get("booking_status", "").strip()
+        date_from = _parse_filter_date(request.GET.get("date_from", ""))
+        date_to = _parse_filter_date(request.GET.get("date_to", ""))
+        customer = CustomerMaster.objects.filter(pk=customer_id).first() if customer_id else None
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        filename = f"party-pending-{customer.name if customer else 'all-parties'}".replace('"', "").replace("/", "-")
+        response["Content-Disposition"] = f'attachment; filename="{filename}.csv"'
+        response.write("\ufeff")
+        writer = csv.writer(response)
+        writer.writerow(["Sr. No.", "Sample Name", "Batch No.", "Booking No.", "Letter Date", "Booking Date", "Booking Status", "Processing Status", "Party Name"])
+        for index, booking in enumerate(_party_pending_bookings(customer_id, statuses, booking_status, date_from, date_to), start=1):
+            writer.writerow(
+                [
+                    index,
+                    booking.sample_name.display_name if booking.sample_name_id else "",
+                    booking.batch_no or "",
+                    booking.tracking_code,
+                    booking.letter_date.strftime("%d/%m/%Y") if booking.letter_date else "",
+                    booking.booking_date.strftime("%d/%m/%Y") if booking.booking_date else "",
+                    booking.get_status_display(),
+                    booking.party_status,
+                    booking.customer.name if booking.customer_id else "",
+                ]
+            )
+        return response
+
+
+class PartyPendingPrintView(LoginRequiredMixin, TemplateView):
+    template_name = "bookings/party_pending_print.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        customer_id = self.request.GET.get("party", "").strip()
+        statuses = self.request.GET.getlist("status")
+        booking_status = self.request.GET.get("booking_status", "").strip()
+        date_from = _parse_filter_date(self.request.GET.get("date_from", ""))
+        date_to = _parse_filter_date(self.request.GET.get("date_to", ""))
+        context["customer"] = CustomerMaster.objects.filter(pk=customer_id).first() if customer_id else None
+        context["bookings"] = _party_pending_bookings(customer_id, statuses, booking_status, date_from, date_to)
+        context["party_summary"] = _party_booking_summary(context["bookings"])
+        context["selected_statuses"] = [label for value, label in PARTY_STATUS_OPTIONS if value in statuses]
+        context["booking_status_label"] = dict(Booking.Status.choices).get(booking_status, "All")
+        context["date_from"] = date_from
+        context["date_to"] = date_to
         return context
 
 
@@ -505,7 +659,14 @@ class InlineMasterCreateView(RoleRequiredMixin, View):
 
         defaults = {"is_active": True}
         if slug == "customer":
-            defaults["address"] = request.POST.get("address", "").strip()
+            defaults.update(
+                {
+                    "address": request.POST.get("address", "").strip(),
+                    "contact_person": request.POST.get("contact_person", "").strip(),
+                    "telephone": request.POST.get("telephone", "").strip(),
+                    "email": request.POST.get("email", "").strip(),
+                }
+            )
         elif slug == "sample-name":
             defaults.update(
                 {
@@ -559,6 +720,9 @@ class InlineMasterCreateView(RoleRequiredMixin, View):
                 "name": getattr(obj, "display_name", obj.name),
                 "raw_name": obj.name,
                 "address": getattr(obj, "address", ""),
+                "contact_person": getattr(obj, "contact_person", ""),
+                "telephone": getattr(obj, "telephone", ""),
+                "email": getattr(obj, "email", ""),
                 "generic_name": getattr(obj, "generic_name", ""),
                 "discipline": getattr(obj, "discipline", ""),
                 "test_group": getattr(obj, "test_group", ""),

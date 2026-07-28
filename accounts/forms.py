@@ -30,6 +30,13 @@ def _delete_booking_permission():
     ).first()
 
 
+def _permission(app_label, codename):
+    return Permission.objects.filter(
+        content_type__app_label=app_label,
+        codename=codename,
+    ).first()
+
+
 class LoginForm(AuthenticationForm):
     username = forms.CharField(widget=forms.TextInput(attrs={"class": "form-control"}))
     password = forms.CharField(widget=forms.PasswordInput(attrs={"class": "form-control"}))
@@ -47,6 +54,8 @@ class AdminUserCreateForm(UserCreationForm):
     is_person_incharge = forms.BooleanField(required=False, label="Person In-charge")
     can_edit_masters = forms.BooleanField(required=False, label="Edit Masters")
     can_delete_bookings = forms.BooleanField(required=False, label="Delete Booking Access")
+    can_view_data_sheet = forms.BooleanField(required=False, label="Data Sheet Access")
+    can_view_user_activity = forms.BooleanField(required=False, label="User Activity Access")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -65,7 +74,7 @@ class AdminUserCreateForm(UserCreationForm):
         required=False,
         widget=forms.CheckboxSelectMultiple,
         label="Direct Permissions",
-        help_text="Assign essential bookings and reports permissions directly to this user.",
+        help_text="Assign bookings and reports permissions directly to this user.",
     )
 
     class Meta:
@@ -82,6 +91,8 @@ class AdminUserCreateForm(UserCreationForm):
             "is_person_incharge",
             "can_edit_masters",
             "can_delete_bookings",
+            "can_view_data_sheet",
+            "can_view_user_activity",
             "signature_file",
             "groups",
             "permissions",
@@ -97,6 +108,8 @@ class AdminUserCreateForm(UserCreationForm):
         self.fields["is_person_incharge"].widget.attrs["class"] = "form-check-input"
         self.fields["can_edit_masters"].widget.attrs["class"] = "form-check-input"
         self.fields["can_delete_bookings"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_view_data_sheet"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_view_user_activity"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -109,6 +122,8 @@ class AdminUserCreateForm(UserCreationForm):
         person_incharge = bool(self.cleaned_data.get("is_person_incharge"))
         can_edit_masters = bool(self.cleaned_data.get("can_edit_masters"))
         can_delete_bookings = bool(self.cleaned_data.get("can_delete_bookings"))
+        can_view_data_sheet = bool(self.cleaned_data.get("can_view_data_sheet"))
+        can_view_user_activity = bool(self.cleaned_data.get("can_view_user_activity"))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
         if commit:
             user.save()
@@ -120,6 +135,14 @@ class AdminUserCreateForm(UserCreationForm):
                 delete_booking_permission = _delete_booking_permission()
                 if delete_booking_permission:
                     selected_permissions.append(delete_booking_permission)
+            if can_view_data_sheet:
+                data_sheet_permission = _permission("bookings", "view_data_sheet")
+                if data_sheet_permission:
+                    selected_permissions.append(data_sheet_permission)
+            if can_view_user_activity:
+                user_activity_permission = _permission("accounts", "view_user_activity")
+                if user_activity_permission:
+                    selected_permissions.append(user_activity_permission)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
             if user.is_staff:
@@ -148,6 +171,8 @@ class AdminUserUpdateForm(forms.ModelForm):
     is_person_incharge = forms.BooleanField(required=False, label="Person In-charge")
     can_edit_masters = forms.BooleanField(required=False, label="Edit Masters")
     can_delete_bookings = forms.BooleanField(required=False, label="Delete Booking Access")
+    can_view_data_sheet = forms.BooleanField(required=False, label="Data Sheet Access")
+    can_view_user_activity = forms.BooleanField(required=False, label="User Activity Access")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -166,7 +191,7 @@ class AdminUserUpdateForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxSelectMultiple,
         label="Direct Permissions",
-        help_text="Assign essential bookings and reports permissions directly to this user.",
+        help_text="Assign bookings and reports permissions directly to this user.",
     )
 
     class Meta:
@@ -182,6 +207,8 @@ class AdminUserUpdateForm(forms.ModelForm):
             "is_person_incharge",
             "can_edit_masters",
             "can_delete_bookings",
+            "can_view_data_sheet",
+            "can_view_user_activity",
             "signature_file",
             "groups",
             "permissions",
@@ -199,6 +226,8 @@ class AdminUserUpdateForm(forms.ModelForm):
         self.fields["is_person_incharge"].widget.attrs["class"] = "form-check-input"
         self.fields["can_edit_masters"].widget.attrs["class"] = "form-check-input"
         self.fields["can_delete_bookings"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_view_data_sheet"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_view_user_activity"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -215,6 +244,12 @@ class AdminUserUpdateForm(forms.ModelForm):
                 content_type__app_label="bookings",
                 codename="delete_booking",
             ).exists()
+            self.fields["can_view_data_sheet"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="bookings", codename="view_data_sheet"
+            ).exists()
+            self.fields["can_view_user_activity"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="accounts", codename="view_user_activity"
+            ).exists()
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -226,6 +261,8 @@ class AdminUserUpdateForm(forms.ModelForm):
         person_incharge = bool(self.cleaned_data.get("is_person_incharge"))
         can_edit_masters = bool(self.cleaned_data.get("can_edit_masters"))
         can_delete_bookings = bool(self.cleaned_data.get("can_delete_bookings"))
+        can_view_data_sheet = bool(self.cleaned_data.get("can_view_data_sheet"))
+        can_view_user_activity = bool(self.cleaned_data.get("can_view_user_activity"))
         user.is_active = bool(self.cleaned_data.get("is_active", True))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
 
@@ -265,6 +302,14 @@ class AdminUserUpdateForm(forms.ModelForm):
                 delete_booking_permission = _delete_booking_permission()
                 if delete_booking_permission:
                     selected_permissions.append(delete_booking_permission)
+            if can_view_data_sheet:
+                data_sheet_permission = _permission("bookings", "view_data_sheet")
+                if data_sheet_permission:
+                    selected_permissions.append(data_sheet_permission)
+            if can_view_user_activity:
+                user_activity_permission = _permission("accounts", "view_user_activity")
+                if user_activity_permission:
+                    selected_permissions.append(user_activity_permission)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
 

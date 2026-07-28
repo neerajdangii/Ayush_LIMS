@@ -73,6 +73,16 @@
         <label class="form-check-label" for="id_can_delete_bookings">Delete Booking Access</label>
       </div>
 
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_view_data_sheet }}
+        <label class="form-check-label" for="id_can_view_data_sheet">Data Sheet Access</label>
+      </div>
+
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_view_user_activity }}
+        <label class="form-check-label" for="id_can_view_user_activity">User Activity Access</label>
+      </div>
+
       <div class="col-md-12">
         <label class="form-label" for="id_signature_file">Signature file</label>
         {{ form.signature_file }}

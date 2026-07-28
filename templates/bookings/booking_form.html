@@ -300,6 +300,20 @@
           <label class="form-label" for="inlineMasterAddress">Address</label>
           <textarea id="inlineMasterAddress" class="form-control" rows="3"></textarea>
         </div>
+        <div class="row g-3 mt-0 d-none" id="inlineMasterContactWrap">
+          <div class="col-md-4">
+            <label class="form-label" for="inlineMasterContactPerson">Contact Person</label>
+            <input type="text" id="inlineMasterContactPerson" class="form-control" maxlength="255">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="inlineMasterTelephone">Telephone</label>
+            <input type="tel" id="inlineMasterTelephone" class="form-control" maxlength="50">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="inlineMasterEmail">Email</label>
+            <input type="email" id="inlineMasterEmail" class="form-control">
+          </div>
+        </div>
         <div class="text-danger small mt-2 d-none" id="inlineMasterError"></div>
       </div>
       <div class="modal-footer">
@@ -325,6 +339,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const nameInput = document.getElementById('inlineMasterName');
   const addressInput = document.getElementById('inlineMasterAddress');
   const addressWrap = document.getElementById('inlineMasterAddressWrap');
+  const contactPersonInput = document.getElementById('inlineMasterContactPerson');
+  const telephoneInput = document.getElementById('inlineMasterTelephone');
+  const emailInput = document.getElementById('inlineMasterEmail');
+  const contactWrap = document.getElementById('inlineMasterContactWrap');
   const sampleInlineFields = {
     genericName: document.getElementById('inlineSampleGenericName'),
     sampleType: document.getElementById('inlineSampleType'),
@@ -1347,6 +1365,9 @@ document.addEventListener('DOMContentLoaded', function () {
       const isSampleMaster = current.slug === 'sample-name';
       nameInput.value = '';
       addressInput.value = '';
+      contactPersonInput.value = '';
+      telephoneInput.value = '';
+      emailInput.value = '';
       Object.values(sampleInlineFields).forEach((field) => {
         if (field) {
           field.value = '';
@@ -1369,6 +1390,7 @@ document.addEventListener('DOMContentLoaded', function () {
         sampleInlineFields.testGroup.value = 'Chemical/Instrument Section';
       }
       addressWrap.classList.toggle('d-none', current.slug !== 'customer');
+      contactWrap.classList.toggle('d-none', current.slug !== 'customer');
       errorBox.classList.add('d-none');
       errorBox.textContent = '';
       if (modal) {
@@ -1398,6 +1420,9 @@ document.addEventListener('DOMContentLoaded', function () {
     body.append('name', name);
     if (current.slug === 'customer') {
       body.append('address', addressInput.value.trim());
+      body.append('contact_person', contactPersonInput.value.trim());
+      body.append('telephone', telephoneInput.value.trim());
+      body.append('email', emailInput.value.trim());
     }
     if (current.slug === 'sample-name') {
       body.append('generic_name', sampleInlineFields.genericName.value.trim());

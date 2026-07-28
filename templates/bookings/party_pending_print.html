@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Party Pending - {{ customer.name|default:'All Parties' }}</title>
+  <style>
+    body { color: #000; font-family: Arial, sans-serif; font-size: 12px; margin: 16mm; }
+    h2 { margin: 0 0 4px; }
+    p { margin: 0 0 14px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #000; padding: 5px; text-align: left; vertical-align: top; }
+    th { background: #f2f2f2; }
+    @media print { body { margin: 10mm; } }
+  </style>
+</head>
+<body>
+  <h2>Booking Status Report</h2>
+  <p><strong>Company / Party:</strong> {{ customer.name|default:'All Parties' }} &nbsp; | &nbsp; <strong>Booking Status:</strong> {{ booking_status_label }} &nbsp; | &nbsp; <strong>Processing Status:</strong> {{ selected_statuses|join:', ' }}<br><strong>From:</strong> {{ date_from|date:'d/m/Y'|default:'Any date' }} &nbsp; | &nbsp; <strong>To:</strong> {{ date_to|date:'d/m/Y'|default:'Any date' }} &nbsp; | &nbsp; <strong>Generated:</strong> {% now "d/m/Y H:i" %}</p>
+  <h3>Party-wise Sample Count</h3>
+  <table style="margin-bottom:14px; width:55%">
+    <thead><tr><th>Party Name</th><th>Samples Booked</th></tr></thead>
+    <tbody>{% for row in party_summary %}<tr><td>{{ row.party_name }}</td><td>{{ row.sample_count }}</td></tr>{% empty %}<tr><td colspan="2" style="text-align:center">No bookings match the selected filters.</td></tr>{% endfor %}</tbody>
+  </table>
+  <table>
+    <thead><tr><th>Sr. No.</th><th>Sample Name</th><th>Batch No.</th><th>Booking No.</th><th>Letter Date</th><th>Booking Date</th><th>Booking Status</th><th>Processing Status</th><th>Party Name</th></tr></thead>
+    <tbody>
+      {% for booking in bookings %}
+      <tr>
+        <td>{{ forloop.counter }}</td><td>{{ booking.sample_name.display_name|default:'-' }}</td>
+        <td>{{ booking.batch_no|default:'-' }}</td><td>{{ booking.tracking_code }}</td>
+        <td>{{ booking.letter_date|date:'d/m/Y'|default:'-' }}</td><td>{{ booking.booking_date|date:'d/m/Y' }}</td>
+        <td>{{ booking.get_status_display }}</td><td>{{ booking.party_status }}</td><td>{{ booking.customer.name|default:'-' }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9" style="text-align:center">No records match the selected filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <script>window.addEventListener('load', () => window.print());</script>
+</body>
+</html>

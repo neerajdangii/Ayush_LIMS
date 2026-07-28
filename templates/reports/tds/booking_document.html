@@ -42,16 +42,6 @@
       padding: 0 !important;
     }
     {% if document_type == 'ac' %}
-    .tds-template-content {
-      zoom: 0.8;
-    }
-    @supports not (zoom: 1) {
-      .tds-template-content {
-        transform: scale(0.8);
-        transform-origin: top center;
-        width: 125% !important;
-      }
-    }
     .tds-template-content .tds-ac-document {
       margin: 0 auto !important;
       width: 100% !important;
@@ -59,8 +49,16 @@
     {% endif %}
     {% if document_type == 'job_order' %}
     .tds-template-content {
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
+      line-height: 1.15 !important;
       min-height: 257mm;
       position: relative;
+    }
+    .tds-template-content,
+    .tds-template-content * {
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
     }
     .tds-template-content .tds-job-sign-table {
       bottom: 22mm;
@@ -99,18 +97,6 @@
       position: absolute;
       right: 0;
       text-align: center;
-    }
-    {% endif %}
-    {% if document_type == 'checklist' %}
-    .tds-template-content {
-      zoom: 0.8;
-    }
-    @supports not (zoom: 1) {
-      .tds-template-content {
-        transform: scale(0.8);
-        transform-origin: top center;
-        width: 125% !important;
-      }
     }
     {% endif %}
   }
@@ -156,33 +142,37 @@
     color: #000;
     font-family: "Times New Roman", Times, serif;
     min-height: 279mm;
-    padding: 36mm 7mm 58mm;
-    position: relative;
+    padding: 7mm;
   }
   .tds-ads-print-page + .tds-ads-print-page {
     margin-top: 8mm;
-  }
-  .tds-ads-page-header,
-  .tds-ads-page-footer {
-    left: 7mm;
-    overflow: hidden;
-    position: absolute;
-    right: 7mm;
-  }
-  .tds-ads-page-header {
-    max-height: 31mm;
-    top: 5mm;
-  }
-  .tds-ads-page-footer {
-    bottom: 5mm;
-    max-height: 52mm;
   }
   .tds-ads-page-number {
     font-family: "Times New Roman", Times, serif;
     font-size: 12px;
     font-weight: 700;
-    margin-top: 2mm;
+    margin-top: 0;
     text-align: center;
+  }
+  .tds-ads-signature-container {
+    position: relative;
+  }
+  .tds-ads-signature-line {
+    bottom: 3mm;
+    left: 2mm;
+    margin: 0 !important;
+    position: absolute;
+    right: 2mm;
+  }
+  /* ADS pages expand to their content; do not show nested scroll controls. */
+  .tds-ads-page-body,
+  .tds-ads-page-body * {
+    scrollbar-width: none;
+  }
+  .tds-ads-page-body ::-webkit-scrollbar {
+    display: none;
+    height: 0;
+    width: 0;
   }
   {% if document_type == 'checklist' %}
   .tds-template-content {
@@ -343,6 +333,16 @@
   .tds-template-content .tds-check-footer-table td:last-child {
     text-align: right !important;
   }
+  .tds-template-content .tds-check-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    margin-top: 5mm;
+    page-break-inside: avoid;
+    text-align: center;
+  }
+  .tds-template-content .tds-check-footer strong:last-child {
+    text-align: right;
+  }
   .tds-template-content,
   .tds-template-content * {
     scrollbar-width: none;
@@ -355,10 +355,16 @@
   {% endif %}
   {% if document_type == 'job_order' %}
   .tds-template-content {
-    font-size: 9px;
-    line-height: 1.05;
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 10pt !important;
+    line-height: 1.15 !important;
     min-height: 257mm;
     position: relative;
+  }
+  .tds-template-content,
+  .tds-template-content * {
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 10pt !important;
   }
   .tds-template-content p {
     margin: 0 0 2px;
@@ -422,11 +428,17 @@
   }
   .tds-template-content .tds-job-order {
     box-sizing: border-box;
-    font-size: 11px;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
     line-height: 1.15;
     min-height: 257mm;
     padding-bottom: 42mm;
     position: relative;
+  }
+  .tds-template-content .tds-job-order,
+  .tds-template-content .tds-job-order * {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
   }
   .tds-template-content .tds-job-order table {
     border-collapse: collapse !important;
@@ -444,6 +456,8 @@
   }
   .tds-template-content .tds-job-order td,
   .tds-template-content .tds-job-order th {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
     border: 1px solid #000 !important;
     padding: 3px 4px;
     vertical-align: middle;
@@ -521,7 +535,8 @@
     right: 0;
   }
   .tds-job-signatures > div {
-    font-size: 11px;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
   }
   .tds-job-signatures > div:nth-child(2) {
     text-align: center;
@@ -532,6 +547,8 @@
   .tds-job-page {
     bottom: 8mm;
     left: 0;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
     position: absolute;
     right: 0;
     text-align: center;
@@ -639,34 +656,153 @@
   .tds-ac-footer strong:last-child {
     text-align: right;
   }
-  {% if document_type == 'ac' %}
+  .tds-template-content .tds-compact-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    margin-top: 5mm;
+    page-break-inside: avoid;
+    text-align: center;
+  }
+  .tds-template-content .tds-compact-footer strong:last-child {
+    text-align: right;
+  }
+  {% if document_type == 'trf' %}
   .tds-template-content {
-    zoom: 0.8;
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 10pt !important;
   }
-  @supports not (zoom: 1) {
-    .tds-template-content {
-      transform: scale(0.8);
-      transform-origin: top center;
-      width: 125% !important;
-    }
+  .tds-trf-document {
+    box-sizing: border-box;
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 10pt !important;
+    margin: 0 auto;
+    max-width: 180mm;
+    padding-bottom: 8mm;
   }
-  {% endif %}
-  {% if document_type == 'checklist' %}
-  .tds-template-content {
-    zoom: 0.8;
+  .tds-trf-document,
+  .tds-trf-document * {
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 10pt !important;
   }
-  @supports not (zoom: 1) {
-    .tds-template-content {
-      transform: scale(0.8);
-      transform-origin: top center;
-      width: 125% !important;
-    }
+  .tds-trf-document table {
+    border-collapse: collapse !important;
+    height: auto !important;
+    margin: 0 0 1.5mm !important;
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+  .tds-trf-document td,
+  .tds-trf-document th {
+    border: 1px solid #000 !important;
+    line-height: 1.08 !important;
+    padding: 1px 3px !important;
+    vertical-align: middle !important;
+  }
+  .tds-trf-header td {
+    text-align: center;
+  }
+  .tds-trf-logo {
+    width: 33%;
+  }
+  .tds-trf-header img {
+    height: 48px !important;
+    margin: 0 auto !important;
+    max-width: 105px !important;
+    object-fit: contain;
+    width: auto !important;
+  }
+  .tds-trf-title {
+    border-top: 1px solid #000;
+    margin: 2px -3px -1px;
+    padding-top: 1px;
+  }
+  .tds-trf-date {
+    margin: 0 0 1mm;
+    text-align: right;
+  }
+  .tds-trf-customer td:first-child,
+  .tds-trf-sample td:first-child {
+    font-weight: 700;
+    width: 18%;
+  }
+  .tds-trf-customer td:nth-child(3),
+  .tds-trf-sample td:nth-child(3) {
+    font-weight: 700;
+    width: 25%;
+  }
+  .tds-trf-note {
+    line-height: 1.1 !important;
+    margin: 2mm 0 2mm !important;
+  }
+  .tds-trf-tests td {
+    height: 8mm;
+    vertical-align: top !important;
+  }
+  .tds-trf-sign-area td {
+    height: 32mm !important;
+    vertical-align: bottom !important;
+  }
+  .tds-trf-sign-area div {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 7mm;
+  }
+  /* Compatibility layout for the existing editable TRF master. */
+  .tds-trf-document > table:nth-of-type(1) td {
+    text-align: center !important;
+  }
+  .tds-trf-document > table:nth-of-type(1) td:first-child {
+    width: 33% !important;
+  }
+  .tds-trf-document > table:nth-of-type(1) img {
+    display: block;
+    height: 48px !important;
+    margin: 0 auto !important;
+    max-width: 105px !important;
+    object-fit: contain;
+    width: auto !important;
+  }
+  .tds-trf-document > p:first-of-type {
+    margin: 1mm 0 !important;
+    text-align: right !important;
+  }
+  .tds-trf-document > p:nth-of-type(2) {
+    margin: 2mm 0 !important;
+  }
+  .tds-trf-document > table:nth-of-type(2) td:first-child,
+  .tds-trf-document > table:nth-of-type(3) td:first-child {
+    font-weight: 700;
+  }
+  .tds-trf-document > table:nth-of-type(2) th,
+  .tds-trf-document > table:nth-of-type(3) th {
+    font-weight: 700;
+  }
+  .tds-trf-document > table:nth-of-type(3) tr {
+    height: auto !important;
+  }
+  .tds-trf-document > table:nth-of-type(3) tr:nth-last-child(2) td {
+    height: 7mm !important;
+  }
+  .tds-trf-document > table:nth-of-type(3) tr:last-child td {
+    height: 30mm !important;
+    vertical-align: bottom !important;
+  }
+  .tds-trf-document > table:nth-of-type(3) tr:last-child p {
+    margin: 0 !important;
+  }
+  .tds-trf-footer {
+    display: grid;
+    font-weight: 700;
+    grid-template-columns: 1fr 1fr 1fr;
+    margin-top: 5mm;
+    text-align: center;
+  }
+  .tds-trf-footer span:last-child {
+    text-align: right;
   }
   {% endif %}
   @media print {
-    /* Disable absolute positioning for footer/signature blocks to avoid overlap */
-    .tds-template-content .tds-job-sign-table,
-    .tds-template-content .tds-job-footer-table,
+    /* Keep Job Order signatures anchored to the bottom; normalize other document footers. */
     .tds-template-content .tds-check-sign-table,
     .tds-template-content .tds-check-footer-table,
     .tds-template-content .tds-job-page-marker {
@@ -676,16 +812,38 @@
       right: auto !important;
       width: 100% !important;
     }
-    .tds-template-content .tds-job-order,
     .tds-template-content .tds-sample-checklist {
       padding-bottom: 0 !important;
       position: static !important;
+    }
+    .tds-template-content .tds-job-signatures {
+      bottom: 22mm !important;
+      left: 0 !important;
+      position: fixed !important;
+      right: 0 !important;
+    }
+    .tds-template-content .tds-job-signatures > div {
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
+    }
+    .tds-template-content .tds-job-page {
+      bottom: 8mm !important;
+      left: 0 !important;
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
+      position: fixed !important;
+      right: 0 !important;
+      text-align: center !important;
     }
     @page {
       size: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}Letter{% else %}A4{% endif %};
       margin: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}0{% else %}8mm{% endif %};
     }
-    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    html, body, main.app-shell, .tds-print-sheet, .tds-print-sheet .card-body {
+      background: #fff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
     body::before, nav, .tds-document-actions { display: none !important; }
     main.app-shell { width: 100%; margin: 0 !important; padding: 0 !important; }
     .tds-print-sheet,
@@ -701,6 +859,11 @@
       padding: {% if document_type == 'ac' %}1.5mm 6.5mm 7mm{% elif document_type == 'job_order' %}13mm 8mm 9mm{% elif document_type == 'checklist' %}1.5mm 6.5mm 7mm{% else %}0{% endif %} !important;
       box-sizing: border-box !important;
     }
+    {% if document_type == 'trf' %}
+    .tds-print-sheet {
+      padding: 6mm 10mm !important;
+    }
+    {% endif %}
     .tds-template-content {
       font-size: 12px !important;
       line-height: 1.2 !important;
@@ -718,31 +881,11 @@
     .tds-template-content .tds-ac-document table {
       table-layout: auto !important;
     }
-    {% if document_type == 'ac' %}
-    .tds-template-content {
-      zoom: 0.8 !important;
-    }
-    @supports not (zoom: 1) {
-      .tds-template-content {
-        transform: scale(0.8);
-        transform-origin: top center;
-        width: 125% !important;
-      }
-    }
-    {% endif %}
     {% if document_type == 'checklist' %}
     .tds-template-content {
       font-family: Arial, Helvetica, sans-serif !important;
       font-size: 16px !important;
       line-height: 1.15 !important;
-      zoom: 0.8 !important;
-    }
-    @supports not (zoom: 1) {
-      .tds-template-content {
-        transform: scale(0.8);
-        transform-origin: top center;
-        width: 125% !important;
-      }
     }
     .tds-sample-checklist {
       min-height: 270.5mm;
@@ -794,10 +937,16 @@
     {% endif %}
     {% if document_type == 'job_order' %}
     .tds-template-content {
-      font-size: 9px !important;
-      line-height: 1.05 !important;
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
+      line-height: 1.15 !important;
       min-height: 257mm;
       position: relative;
+    }
+    .tds-template-content,
+    .tds-template-content * {
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
     }
     .tds-template-content table {
       margin: 0 0 8px !important;
@@ -854,11 +1003,17 @@
       text-align: center;
     }
     .tds-template-content .tds-job-order {
-      font-size: 11px !important;
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
       line-height: 1.15 !important;
       min-height: 257mm;
       padding-bottom: 42mm;
       position: relative;
+    }
+    .tds-template-content .tds-job-order,
+    .tds-template-content .tds-job-order * {
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
     }
     .tds-template-content .tds-job-order table:last-of-type {
       bottom: auto;
@@ -870,7 +1025,13 @@
     }
     .tds-template-content .tds-job-order td,
     .tds-template-content .tds-job-order th {
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
       padding: 3px 4px !important;
+    }
+    .tds-template-content .tds-job-tests .tds-job-test-row,
+    .tds-template-content .tds-job-tests .tds-job-test-row td {
+      height: 7mm !important;
     }
     .tds-job-signatures {
       bottom: 22mm;
@@ -884,24 +1045,31 @@
       padding: 0 !important;
     }
     .tds-ads-print-page {
-      height: 279mm !important;
+      display: block;
       margin: 0 !important;
-      min-height: 279mm !important;
-      overflow: hidden !important;
-      page-break-after: always;
-      break-after: page;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
-    .tds-ads-print-page:last-child {
-      page-break-after: auto;
-      break-after: auto;
+    .tds-ads-print-page:not(:last-child) {
+      page-break-after: always !important;
+      break-after: page !important;
     }
     .tds-ads-page-body {
-      overflow: hidden;
+      overflow: visible;
+      page-break-inside: auto;
+      break-inside: auto !important;
     }
-    .tds-ads-page-header .tds-template-content,
-    .tds-ads-page-footer .tds-template-content {
-      font-size: 11px !important;
-      line-height: 1.15 !important;
+    .tds-ads-print-page .tds-template-content {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-ads-print-page .tds-template-content table,
+    .tds-ads-print-page .tds-template-content table tbody,
+    .tds-ads-print-page .tds-template-content table tr,
+    .tds-ads-print-page .tds-template-content table thead,
+    .tds-ads-print-page .tds-template-content table tfoot {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
     }
     section .tds-template-content {
       min-height: auto !important;
@@ -912,13 +1080,9 @@
     }
     {% endif %}
     section {
+      display: block;
       page-break-inside: avoid;
       break-inside: avoid;
-      display: block;
-    }
-    section:not(:first-of-type) {
-      page-break-before: always;
-      break-before: page;
     }
     section .tds-template-content {
       page-break-inside: avoid;
@@ -934,26 +1098,6 @@
       page-break-inside: avoid;
       break-inside: avoid;
     }
-    {% if document_type == 'ads' %}
-    section,
-    /* Force a new printed page for elements needing an explicit break */
-    .tds-force-break {
-      page-break-before: always !important;
-      break-before: page !important;
-    }
-    section .tds-template-content,
-    .tds-template-content table,
-    .tds-template-content table tbody,
-    .tds-template-content table thead,
-    .tds-template-content table tfoot {
-      page-break-inside: auto;
-      break-inside: auto;
-    }
-    .tds-template-content table tr {
-      page-break-inside: avoid;
-      break-inside: avoid;
-    }
-    {% endif %}
   }
 </style>
 {% endblock %}
@@ -970,10 +1114,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm tds-print-sheet"
-     data-booking-tracking="{{ booking.tracking_code|default:''|escape }}"
-     data-booking-sample="{{ booking.sample_name.name|default:''|escape }}"
-     data-document-type="{{ document_type|default:''|escape }}">
+<div class="card shadow-sm tds-print-sheet">
   <div class="card-body">
     {% if rendered_templates or fallback_ads_templates %}
       {% if document_type == 'ads' %}
@@ -982,12 +1123,10 @@
           {% if can_edit_tds_template and page.tds_template_pk %}
           <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' page.tds_template_pk %}">Edit template</a>
           {% endif %}
-          {% if page.header %}
-          <div class="tds-ads-page-header">
-            <div class="tds-template-content">{{ page.header|safe }}</div>
-          </div>
-          {% endif %}
           <div class="tds-ads-page-body">
+            {% if page.header %}
+            <div class="tds-template-content">{{ page.header|safe }}</div>
+            {% endif %}
             {% if page.source_preview.kind == "pdf" and page.source_preview.url %}
             <object class="tds-source-frame" data="{{ page.source_preview.url }}" type="application/pdf">
               <div class="alert alert-info py-2 mb-0">
@@ -1003,12 +1142,10 @@
             {% else %}
             <div class="tds-template-content">{{ page.content|strip_hfb|safe }}</div>
             {% endif %}
-          </div>
-          {% if page.footer %}
-          <div class="tds-ads-page-footer">
+            {% if page.footer %}
             <div class="tds-template-content">{{ page.footer|safe }}</div>
+            {% endif %}
           </div>
-          {% endif %}
         </section>
         {% empty %}
         <div class="alert alert-info mb-0">
@@ -1081,57 +1218,6 @@
     {% endif %}
   </div>
 </div>
-
-<script>
-  (function () {
-    function forceBookingTablePageBreaks() {
-      try {
-        const sheetEl = document.querySelector('.tds-print-sheet');
-        const bookingTracking = sheetEl ? sheetEl.dataset.bookingTracking : '';
-        const bookingSample = sheetEl ? sheetEl.dataset.bookingSample : '';
-
-        // Only apply for ads documents
-        const isAds = sheetEl ? sheetEl.dataset.documentType === 'ads' : false;
-        if (!isAds) return;
-
-        const contents = document.querySelectorAll('.tds-template-content');
-        contents.forEach(content => {
-          const tables = content.querySelectorAll('table');
-          tables.forEach(tbl => {
-            if (tbl.dataset.tdsForceApplied) return;
-            const text = (tbl.textContent || '').trim();
-            const shouldForce = (bookingTracking && text.indexOf(bookingTracking) !== -1)
-              || (bookingSample && text.indexOf(bookingSample) !== -1)
-              || /booking|tracking|sample/i.test(text);
-            if (shouldForce) {
-              // prefer adding a wrapper to avoid breaking table styling
-              const wrapper = document.createElement('div');
-              wrapper.className = 'tds-force-break';
-              tbl.parentNode.insertBefore(wrapper, tbl);
-              wrapper.appendChild(tbl);
-              tbl.dataset.tdsForceApplied = '1';
-            }
-          });
-        });
-      } catch (e) {
-        // fail silently
-        console.error('forceBookingTablePageBreaks error', e);
-      }
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function () {
-        forceBookingTablePageBreaks();
-      });
-    } else {
-      forceBookingTablePageBreaks();
-    }
-
-    window.addEventListener('beforeprint', function () {
-      forceBookingTablePageBreaks();
-    });
-  })();
-</script>
 
 {% if auto_print %}
 <script>

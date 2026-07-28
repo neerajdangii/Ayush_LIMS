@@ -132,6 +132,9 @@ def _booking_template_context(booking, request):
         "batch_size": booking.batch_size,
         "customer_name": booking.customer.name if booking.customer_id else "",
         "customer_address": booking.customer.address if booking.customer_id else "",
+        "customer_contact_person": booking.customer.contact_person if booking.customer_id else "",
+        "customer_telephone": booking.customer.telephone if booking.customer_id else "",
+        "customer_email": booking.customer.email if booking.customer_id else "",
         "manufacturer_name": booking.manufacturer.name if booking.manufacturer_id else "",
         "submitter_name": booking.submitter.name if booking.submitter_id else "",
         "protocol_name": booking.protocol.name if booking.protocol_id else "",
@@ -150,13 +153,10 @@ def _booking_template_context(booking, request):
     }
 
 
-def _render_tds_content(content, booking, request, document_type=None):
-    if not content and document_type == TDSDocumentTemplate.DocumentType.JOB_ORDER:
-        return _build_tds_job_order_html(content, booking)
-    if not content and document_type == TDSDocumentTemplate.DocumentType.CHECKLIST:
-        return _build_tds_sample_checklist_html(content, booking)
-    if not content and document_type == TDSDocumentTemplate.DocumentType.AC:
-        return _build_tds_ac_html(content, booking)
+def _render_tds_content(content, booking, request, document_type=None, inject_booking=None):
+    # Keep the optional argument for existing callers. Job Order, AC, TRF,
+    # and Checklist now use only their explicit ID-based template fields.
+
     if not content:
         return ""
     rendered_content = _render_django_fragment(content, booking, request, label=document_type or "document")
@@ -164,14 +164,46 @@ def _render_tds_content(content, booking, request, document_type=None):
         return rendered_content
     rendered_content = _strip_tds_trailing_empty_blocks(rendered_content)
     rendered_content = _unwrap_tds_outer_table(rendered_content)
-    if document_type == TDSDocumentTemplate.DocumentType.JOB_ORDER:
-        rendered_content = _fill_tds_job_order(rendered_content, booking)
-    elif document_type == TDSDocumentTemplate.DocumentType.CHECKLIST:
-        rendered_content = _fill_tds_sample_checklist(rendered_content, booking)
-    elif document_type == TDSDocumentTemplate.DocumentType.AC:
-        rendered_content = _fill_tds_ac(rendered_content, booking)
-    else:
+    if document_type in {TDSDocumentTemplate.DocumentType.AC, TDSDocumentTemplate.DocumentType.CHECKLIST}:
+        rendered_content = _clean_tds_legacy_footer(rendered_content)
+    id_based_documents = {
+        TDSDocumentTemplate.DocumentType.JOB_ORDER,
+        TDSDocumentTemplate.DocumentType.AC,
+        TDSDocumentTemplate.DocumentType.TRF,
+        TDSDocumentTemplate.DocumentType.CHECKLIST,
+    }
+    if document_type not in id_based_documents:
         rendered_content = _fill_tds_booking_labels(rendered_content, booking)
+    if document_type == TDSDocumentTemplate.DocumentType.JOB_ORDER:
+        # Preserve ID-based fields while generating only the test rows selected
+        # on the booking and formatting the signature/page footer.
+        rendered_content = _fill_tds_job_order_tests(rendered_content, booking)
+        rendered_content = _strip_tds_job_order_empty_tables(rendered_content)
+        rendered_content = _mark_tds_job_order_footer_tables(rendered_content)
+    if document_type == TDSDocumentTemplate.DocumentType.TRF:
+        # Keep the editable TRF master and its ID-based fields intact; only
+        # add customer contact details, selected booking tests, and the fixed
+        # document footer.
+        test_names = ", ".join(test.name for test in booking.test_to_be_performed.order_by("name"))
+        customer = booking.customer if booking.customer_id else None
+        for label, value in (
+            ("Contact Person", customer.contact_person if customer else ""),
+            ("Telephone", customer.telephone if customer else ""),
+            ("Email", customer.email if customer else ""),
+            ("Ref. No.", booking.customer_sr_no),
+            ("Tests", test_names),
+        ):
+            rendered_content = _fill_tds_trf_row_value(rendered_content, label, value)
+        rendered_content = re.sub(r"(?:&nbsp;|&#160;|\xa0){3,}", " ", rendered_content, flags=re.IGNORECASE)
+        rendered_content = (
+            '<div class="tds-trf-document">'
+            f"{rendered_content}"
+            '<div class="tds-trf-footer"><span></span><span>Page 1 of 1</span>'
+            '<span>QSF/MSP/71/F01-00</span></div>'
+            "</div>"
+        )
+    if document_type == TDSDocumentTemplate.DocumentType.ADS:
+        rendered_content = _position_tds_ads_signature_line(rendered_content)
     return _strip_tds_trailing_empty_blocks(rendered_content)
 
 
@@ -179,22 +211,35 @@ def _split_tds_rendered_pages(content):
     content = str(content or "")
     if not content:
         return [""]
-    parts = re.split(
-        r"(?:\[\[page_break\]\]|<!--\s*pagebreak\s*-->|<[^>]+\bclass=[\"'][^\"']*(?:tds-page-break|page-break)[^\"']*[\"'][^>]*>\s*</[^>]+>)",
+
+    marker = "__TDS_PAGE_BREAK__"
+    content = re.sub(r"\[\[page_break\]\]", marker, content, flags=re.IGNORECASE)
+    content = re.sub(r"<!--\s*pagebreak\s*-->", marker, content, flags=re.IGNORECASE)
+    content = re.sub(
+        r"<[^>]+class=['\"][^'\"]*(?:tds-page-break|page-break|tds-force-break)[^'\"]*['\"][^>]*>\s*</[^>]+>",
+        marker,
         content,
         flags=re.IGNORECASE,
     )
-    pages = [part.strip() for part in parts if part and part.strip()]
-    return pages or [content]
+    content = re.sub(
+        r"<[^>]+style=['\"][^'\"]*(?:page-break-before|page-break-after|break-before|break-after)\s*:[^'\"]*(?:always|page|left|right)[^'\"]*['\"][^>]*>",
+        marker,
+        content,
+        flags=re.IGNORECASE,
+    )
+    parts = [part.strip() for part in content.split(marker) if part and part.strip()]
+    return parts or [content]
 
 
-def _render_tds_template_fragment(content, booking, request):
+def _render_tds_template_fragment(content, booking, request, inject_booking=None):
     if not content:
         return ""
+    if inject_booking is None:
+        inject_booking = bool(request and request.GET and request.GET.get("inject_booking") == "1")
+
     rendered_content = _render_django_fragment(content, booking, request, label="header/footer")
     if "tds-template-render-error" in rendered_content:
         return rendered_content
-    rendered_content = _fill_tds_booking_labels(rendered_content, booking)
     rendered_content = rendered_content.replace("[[page_number]]", '<span class="tds-page-current"></span>')
     rendered_content = rendered_content.replace("[[total_pages]]", '<span class="tds-page-total"></span>')
     return _strip_tds_trailing_empty_blocks(rendered_content)
@@ -340,6 +385,72 @@ def _build_tds_job_order_html(content, booking):
         '<div><strong>Approved By</strong><br>(Sign &amp; Date)</div>'
         '</div>'
         '<div class="tds-job-page"><strong>Page 1 of 1</strong></div>'
+        '</div>'
+    )
+
+
+def _build_tds_trf_html(content, booking):
+    """Render the TRF in its approved single-page requisition form layout."""
+    sample = booking.sample_name if booking.sample_name_id else None
+    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
+    tests = ", ".join(test.name for test in booking.test_to_be_performed.order_by("name"))
+    value = lambda item, default="N.A": _format_tds_ac_value(item, default=default)
+    values = {
+        "logo_url": _extract_tds_ac_logo_url(content),
+        "date": value(_format_report_date(booking.booking_date)),
+        "customer": value(booking.customer.name if booking.customer_id else ""),
+        "address": value(booking.customer.address if booking.customer_id else "", default=""),
+        "contact": value(booking.customer.contact_person if booking.customer_id else ""),
+        "telephone": value(booking.customer.telephone if booking.customer_id else ""),
+        "email": value(booking.customer.email if booking.customer_id else ""),
+        "sample_name": value(sample.display_name if sample else ""),
+        "batch_no": value(booking.batch_no),
+        "batch_size": value(booking.batch_size),
+        "mfg_date": value(_format_report_date(booking.manufacture_date, month_year_only=True)),
+        "exp_date": value(_format_report_date(booking.expiry_retest_date, month_year_only=True)),
+        "manufacturer": value(booking.manufacturer.name if booking.manufacturer_id else ""),
+        "sample_condition": value(booking.sample_condition),
+        "supplied_by": value(booking.collected_by_name),
+        "license_no": value(booking.license_no),
+        "protocol": value(booking.protocol.name if booking.protocol_id else ""),
+        "sample_qty": value(sample_qty),
+        "tests": value(tests, default=""),
+        "sample_code": value(booking.sample_registration_no),
+    }
+
+    return (
+        '<div class="tds-trf-document">'
+        '<table class="tds-trf-header"><tbody><tr>'
+        f'<td class="tds-trf-logo"><img src="{escape(values["logo_url"])}" alt="Ayush Research Laboratories Pvt. Ltd."></td>'
+        '<td><strong>Ayush Research Laboratories Pvt. Ltd.</strong><br>'
+        '1st &amp; 2nd Floor, 25, Gokul Das Compound, Industrial Estate Opposite Kalyan Mill<br>Indore MP-452011'
+        '<div class="tds-trf-title"><strong>SAMPLE REQUISITION FORM</strong></div></td>'
+        '</tr></tbody></table>'
+        f'<div class="tds-trf-date"><strong>Date :- {escape(values["date"])}</strong></div>'
+        '<table class="tds-trf-customer"><tbody>'
+        f'<tr><td>From</td><td colspan="3">{escape(values["customer"])}</td></tr>'
+        f'<tr><td>Customer Name/Address</td><td colspan="3">{escape(values["address"])}</td></tr>'
+        f'<tr><td>Contact Person</td><td>{escape(values["contact"])}</td><td>Telephone</td><td>{escape(values["telephone"])}</td></tr>'
+        f'<tr><td>Email</td><td>{escape(values["email"])}</td><td>Statement of Conformity</td><td>Required/Not Required</td></tr>'
+        '<tr><td>Test Method</td><td colspan="3">Unless informed by customer samples are tested as per the methods in our scope</td></tr>'
+        f'<tr><td>Ref. No.</td><td colspan="3">{escape(values["sample_code"])}</td></tr>'
+        '</tbody></table>'
+        '<p class="tds-trf-note">Sir,<br>Kindly receive the sample for analysis whose details are given below, and submit the test report.</p>'
+        '<table class="tds-trf-sample"><tbody>'
+        f'<tr><td>Sample Name</td><td colspan="3">{escape(values["sample_name"])}</td></tr>'
+        f'<tr><td>Batch No.</td><td colspan="3">{escape(values["batch_no"])}</td></tr>'
+        f'<tr><td>Batch Size</td><td>{escape(values["batch_size"])}</td><td>Sample Qty.</td><td>{escape(values["sample_qty"])}</td></tr>'
+        f'<tr><td>Date of Mfg.</td><td>{escape(values["mfg_date"])}</td><td>Date of Exp.</td><td>{escape(values["exp_date"])}</td></tr>'
+        f'<tr><td>Mfg By.</td><td>{escape(values["manufacturer"])}</td><td>Sample Storage Condition</td><td>{escape(values["sample_condition"])}</td></tr>'
+        f'<tr><td>Supplied By</td><td>{escape(values["supplied_by"])}</td><td>Drug Mfg. Lic. No.</td><td>{escape(values["license_no"])}</td></tr>'
+        f'<tr><td>Protocol</td><td colspan="3">{escape(values["protocol"])}</td></tr>'
+        '<tr><td>Category</td><td colspan="3"><strong>Routine/Priority/Urgent</strong></td></tr>'
+        '<tr><td>Analysis Required</td><td colspan="3">Complete/Partial/Analysis for the following test:</td></tr>'
+        f'<tr class="tds-trf-tests"><td>Tests</td><td colspan="3">{escape(values["tests"])}</td></tr>'
+        '<tr class="tds-trf-sign-area"><td colspan="4">Customer’s Sign : N.A<br><strong>Office Use Only</strong><div><strong>Sample Code: </strong>'
+        f'{escape(values["sample_code"])}<span><strong>Signature:</strong> __________________</span></div></td></tr>'
+        '</tbody></table>'
+        '<div class="tds-trf-footer"><span></span><span>Page 1 of 1</span><span>QSF/MSP/71/F01-00</span></div>'
         '</div>'
     )
 
@@ -581,7 +692,8 @@ def _fill_tds_job_order(content, booking):
         "Storage Condition": booking.sample_condition,
         "Sampling Location": booking.sample_location,
         "Sample Collected by": booking.collected_by_name,
-        "Report No": booking.certificate_no,
+        # The Job Order's Report No field is used as the booking identifier.
+        "Report No": booking.tracking_code,
         "ULR No.": "N.A",
         "Sample Receipt Date": _format_report_date(booking.sample_receipt_date),
         "Analysis started on": _format_report_date(booking.analysis_start_date),
@@ -780,6 +892,20 @@ def _mark_tds_job_order_footer_tables(content):
     return page_block_re.sub(replace_page_block, content)
 
 
+def _strip_tds_job_order_empty_tables(content):
+    """Remove blank table placeholders left in a Job Order master template."""
+    table_re = re.compile(r"<table\b[^>]*>.*?</table>", flags=re.IGNORECASE | re.DOTALL)
+
+    def replace(match):
+        table_html = match.group(0)
+        if re.search(r"<(?:img|svg|canvas)\b", table_html, flags=re.IGNORECASE):
+            return table_html
+        visible_text = unescape(re.sub(r"<[^>]+>", " ", table_html)).replace("\xa0", " ")
+        return "" if not visible_text.strip() else table_html
+
+    return table_re.sub(replace, content)
+
+
 def _fill_next_empty_tds_cell(content, label, value):
     if not value:
         return content
@@ -856,7 +982,7 @@ def _fill_tds_job_order_tests(content, booking):
         rows = []
         for index, test in enumerate(tests, start=1):
             rows.append(
-                "<tr>"
+                '<tr class="tds-job-test-row">'
                 f"<td{attrs[0]} style=\"text-align: center;\">{index}</td>"
                 f"<td{attrs[1]}>{escape(test.name)}</td>"
                 f"<td{attrs[2]}></td>"
@@ -900,7 +1026,16 @@ def _fill_tds_job_order_tests(content, booking):
             body_rows_end = row.end()
 
         replaced_table = True
-        return table_html[:body_rows_start] + build_rows(template_row) + table_html[body_rows_end:]
+        rendered_table = table_html[:body_rows_start] + build_rows(template_row) + table_html[body_rows_end:]
+        if re.search(r"\bclass\s*=", rendered_table, flags=re.IGNORECASE):
+            return re.sub(
+                r'(\bclass\s*=\s*["\'])([^"\']*)',
+                r"\1\2 tds-job-tests",
+                rendered_table,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        return rendered_table.replace("<table", '<table class="tds-job-tests"', 1)
 
     return table_re.sub(replace_table, content)
 
@@ -918,6 +1053,15 @@ def _unwrap_tds_outer_table(content):
     if not match:
         return content
 
+    # A real form header often starts with a table containing multiple cells.
+    # Do not mistake that first form table for a one-cell editor wrapper.
+    first_row_end = re.search(r"</tr\s*>", content, flags=re.IGNORECASE)
+    if not first_row_end:
+        return content
+    first_row = content[: first_row_end.end()]
+    if len(re.findall(r"<td\b", first_row, flags=re.IGNORECASE)) != 1:
+        return content
+
     table_attrs = match.group("table_attrs") or ""
     td_attrs = match.group("td_attrs") or ""
     is_borderless = re.search(r'\bborder\s*=\s*["\']?0\b', table_attrs, flags=re.IGNORECASE) or not re.search(
@@ -930,7 +1074,99 @@ def _unwrap_tds_outer_table(content):
 
 def _strip_tds_trailing_empty_blocks(content):
     empty_block = r"<(p|div|span)[^>]*>(?:\s|&nbsp;|<br\s*/?>)*</\1>"
-    return re.sub(rf"(?:\s*{empty_block})+\s*$", "", content, flags=re.IGNORECASE)
+    empty_pre = r"<pre[^>]*>(?:\s|&nbsp;|<br\s*/?>|<[^>]+>)*</pre>"
+    content = re.sub(rf"(?:\s*{empty_pre})+\s*$", "", content, flags=re.IGNORECASE)
+    content = re.sub(rf"(?:\s*{empty_block})+\s*$", "", content, flags=re.IGNORECASE)
+
+    trailing_node_re = re.compile(
+        r"<(?P<tag>p|div|pre|table)\b[^>]*>(?P<body>.*?)</(?P=tag)>\s*$",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    while match := trailing_node_re.search(content):
+        visible_text = unescape(strip_tags(match.group("body"))).replace("\xa0", " ")
+        if visible_text.strip():
+            break
+        content = content[: match.start()].rstrip()
+    return content
+
+
+def _clean_tds_legacy_footer(content):
+    """Replace legacy spacer-based AC and Checklist footers with a compact footer."""
+    content = re.sub(r"<table\b[^>]*>\s*</table>", "", content, flags=re.IGNORECASE)
+    content = re.sub(
+        r"<div\b[^>]*style=[\"'][^\"']*\bheight\s*:\s*(?:[1-9]\d{2,}|[2-9]\d)px[^\"']*[\"'][^>]*>.*?</div>",
+        "",
+        content,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    def replace_legacy_footer(match):
+        footer_text = unescape(strip_tags(match.group(0))).replace("\xa0", " ")
+        code_match = re.search(r"QSF\s*[|/]\s*MSP\s*[|/]\s*7[.]4\s*[|/]\s*F09-00", footer_text, re.IGNORECASE)
+        footer_code = re.sub(r"\s*[|/]\s*", "/", code_match.group(0)) if code_match else "QSF/MSP/7.4/F09-00"
+        return (
+            '<div class="tds-compact-footer">'
+            '<span></span><strong>Page 1 of 1</strong>'
+            f'<strong>{escape(footer_code)}</strong></div>'
+        )
+
+    return re.sub(
+        r"<pre\b[^>]*>.*?Page\s+1\s+of\s+1.*?</pre>",
+        replace_legacy_footer,
+        content,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
+def _position_tds_ads_signature_line(content):
+    """Anchor the Assay-by-HPLC signature line to the bottom of its bordered form."""
+    signature_re = re.compile(r"<p\b(?P<attrs>[^>]*)>(?P<body>.*?)</p>", flags=re.IGNORECASE | re.DOTALL)
+
+    def mark_signature(match):
+        body = match.group("body")
+        text = strip_tags(body).lower()
+        if "analyzed by" not in text or "reviewed by" not in text:
+            return match.group(0)
+        attrs = match.group("attrs") or ""
+        if re.search(r"\bclass\s*=", attrs, flags=re.IGNORECASE):
+            attrs = re.sub(
+                r'(\bclass\s*=\s*["\'])([^"\']*)',
+                r"\1\2 tds-ads-signature-line",
+                attrs,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        else:
+            attrs += ' class="tds-ads-signature-line"'
+        return f"<p{attrs}>{body}</p>"
+
+    content = signature_re.sub(mark_signature, content)
+    table_tag_re = re.compile(r"</?table\b[^>]*>", flags=re.IGNORECASE)
+    open_tables = []
+    for table_tag in table_tag_re.finditer(content):
+        if table_tag.group(0).lower().startswith("<table"):
+            open_tables.append(table_tag)
+            continue
+        if not open_tables:
+            continue
+        opening_tag = open_tables.pop()
+        table_html = content[opening_tag.start() : table_tag.end()]
+        if "tds-ads-signature-line" not in table_html:
+            continue
+        opening_html = opening_tag.group(0)
+        if re.search(r"\bclass\s*=", opening_html, flags=re.IGNORECASE):
+            opening_html = re.sub(
+                r'(\bclass\s*=\s*["\'])([^"\']*)',
+                r"\1\2 tds-ads-signature-container",
+                opening_html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        else:
+            opening_html = opening_html[:-1] + ' class="tds-ads-signature-container">'
+        return content[: opening_tag.start()] + opening_html + content[opening_tag.end() :]
+    return content
 
 
 def _fill_tds_booking_labels(content, booking):
@@ -972,6 +1208,36 @@ def _fill_tds_booking_labels(content, booking):
             flags=re.IGNORECASE,
         )
     return content
+
+
+def _fill_tds_trf_row_value(content, label, value):
+    """Replace the value cell beside an exact label in the TRF template."""
+    row_re = re.compile(r"<tr\b[^>]*>.*?</tr>", flags=re.IGNORECASE | re.DOTALL)
+    cell_re = re.compile(
+        r"<(?P<tag>t[dh])\b(?P<attrs>[^>]*)>.*?</(?P=tag)>", flags=re.IGNORECASE | re.DOTALL
+    )
+
+    def normalize_label(text):
+        text = unescape(strip_tags(text)).replace("\xa0", " ")
+        text = re.sub(r"\s+", " ", text).strip()
+        return re.sub(r"[\s:.]+$", "", text).casefold()
+
+    expected_label = normalize_label(label)
+
+    def replace_row(match):
+        row_html = match.group(0)
+        cells = list(cell_re.finditer(row_html))
+        for index, cell in enumerate(cells[:-1]):
+            if normalize_label(cell.group(0)) != expected_label:
+                continue
+            value_cell = cells[index + 1]
+            tag = value_cell.group("tag")
+            attrs = value_cell.group("attrs") or ""
+            replacement = f"<{tag}{attrs}>{escape(value or '')}</{tag}>"
+            return row_html[: value_cell.start()] + replacement + row_html[value_cell.end() :]
+        return row_html
+
+    return row_re.sub(replace_row, content)
 
 
 class ReportListView(PermissionRequiredMixin, RoleRequiredMixin, ListView):
@@ -1230,15 +1496,27 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
         for template in template_qs:
             use_source_file = template.display_mode == TDSDocumentTemplate.DisplayMode.SOURCE_FILE
             source_preview = _render_tds_source_file(template, booking, self.request, document_type) if use_source_file else None
-            content = "" if use_source_file else _render_tds_content(template.content, booking, self.request, document_type)
+            # Determine whether this template explicitly requests booking
+            # injection via query param or an inline marker in its editable
+            # content/header/footer.
+            marker = "[[inject_booking]]"
+            template_marker_present = any(
+                marker.lower() in (getattr(template, attr) or "").lower()
+                for attr in ("content", "header_content", "footer_content")
+            )
+            inject_for_template = bool(self.request.GET.get("inject_booking") == "1" or template_marker_present)
+
+            content = "" if use_source_file else _render_tds_content(
+                template.content, booking, self.request, document_type, inject_booking=inject_for_template
+            )
             rendered_templates.append(
                 {
                     "template": template,
                     "test": template.test,
-                    "header_content": mark_safe(_render_tds_template_fragment(template.header_content, booking, self.request)),
+                    "header_content": mark_safe(_render_tds_template_fragment(template.header_content, booking, self.request, inject_booking=inject_for_template)),
                     "content": "" if use_source_file else mark_safe(content),
                     "pages": [] if use_source_file else [mark_safe(page) for page in _split_tds_rendered_pages(content)],
-                    "footer_content": mark_safe(_render_tds_template_fragment(template.footer_content, booking, self.request)),
+                    "footer_content": mark_safe(_render_tds_template_fragment(template.footer_content, booking, self.request, inject_booking=inject_for_template)),
                     "use_source_file": use_source_file,
                     "source_preview": source_preview,
                 }
@@ -1252,7 +1530,11 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
                     continue
                 report_template = getattr(test, "report_template", None)
                 if report_template and report_template.is_active and report_template.content.strip():
-                    content = _render_tds_content(report_template.content, booking, self.request, document_type)
+                    # Respect inline marker on report_template as well.
+                    marker = "[[inject_booking]]"
+                    template_marker_present = marker.lower() in (report_template.content or "").lower()
+                    inject_for_template = bool(self.request.GET.get("inject_booking") == "1" or template_marker_present)
+                    content = _render_tds_content(report_template.content, booking, self.request, document_type, inject_booking=inject_for_template)
                     fallback_ads_templates.append(
                         {
                             "template": report_template,
@@ -1306,19 +1588,34 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
                     )
 
             total_pages = len(page_groups)
-            ads_print_pages = [
-                {
-                    "item": group["item"],
-                    "tds_template_pk": group["tds_template_pk"],
-                    "header": mark_safe(group["header"]),
-                    "content": mark_safe(group["content"]),
-                    "footer": mark_safe(_fill_tds_page_placeholders(_ensure_tds_page_number(group["footer"]), index, total_pages)),
-                    "page_number": index,
-                    "total_pages": total_pages,
-                    "source_preview": group["source_preview"],
-                }
-                for index, group in enumerate(page_groups, start=1)
-            ]
+            ads_print_pages = []
+            for index, group in enumerate(page_groups, start=1):
+                # HPLC ADS headers place the page number below their bottom rule.
+                # Do not add a second copy to the footer when a template already
+                # provides it in either the header or footer.
+                header_content = group["header"]
+                footer_content = group["footer"]
+                has_page_number = (
+                    "tds-page-current" in header_content
+                    or "tds-page-total" in header_content
+                    or "tds-page-current" in footer_content
+                    or "tds-page-total" in footer_content
+                )
+                if not has_page_number:
+                    footer_content = _ensure_tds_page_number(footer_content)
+
+                ads_print_pages.append(
+                    {
+                        "item": group["item"],
+                        "tds_template_pk": group["tds_template_pk"],
+                        "header": mark_safe(_fill_tds_page_placeholders(header_content, index, total_pages)),
+                        "content": mark_safe(_fill_tds_page_placeholders(group["content"], index, total_pages)),
+                        "footer": mark_safe(_fill_tds_page_placeholders(footer_content, index, total_pages)),
+                        "page_number": index,
+                        "total_pages": total_pages,
+                        "source_preview": group["source_preview"],
+                    }
+                )
 
         context.update(
             {

@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}Data Sheet | LIMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">Data Sheet</h4>
+    <div class="text-muted small">Booking status and party-wise sample summary</div>
+  </div>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard' %}">Dashboard</a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-6 col-lg-4">
+        <label class="form-label" for="partyPendingCustomer">Company / Party</label>
+        <select class="form-select" id="partyPendingCustomer" name="party">
+          <option value="">All parties</option>
+          {% for customer in party_customers %}
+          <option value="{{ customer.pk }}" {% if party_customer_id == customer.pk|stringformat:'s' %}selected{% endif %}>{{ customer.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-lg-2">
+        <label class="form-label" for="bookingStatus">Booking Status</label>
+        <select class="form-select" id="bookingStatus" name="booking_status">
+          <option value="">All statuses</option>
+          {% for value, label in booking_status_options %}
+          <option value="{{ value }}" {% if booking_status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-lg-2">
+        <label class="form-label" for="bookingDateFrom">From Date</label>
+        <input class="form-control" type="date" id="bookingDateFrom" name="date_from" value="{{ date_from }}">
+      </div>
+      <div class="col-md-3 col-lg-2">
+        <label class="form-label" for="bookingDateTo">To Date</label>
+        <input class="form-control" type="date" id="bookingDateTo" name="date_to" value="{{ date_to }}">
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <label class="form-label d-block">Status <span class="text-muted small">(select one or more)</span></label>
+        <div class="d-flex flex-wrap gap-2">
+          {% for value, label in status_options %}
+          <input class="btn-check" type="checkbox" name="status" value="{{ value }}" id="status-{{ value }}" {% if value in party_selected_statuses %}checked{% endif %}>
+          <label class="btn btn-outline-{% if value == 'pending' %}warning{% elif value == 'pass' %}success{% elif value == 'draft' %}secondary{% else %}primary{% endif %} btn-sm" for="status-{{ value }}">{{ label }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="col-12 d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" type="submit">View Data</button>
+        <button class="btn btn-outline-success" type="submit" formaction="{% url 'bookings:party_pending_excel' %}">Download Excel</button>
+        <button class="btn btn-outline-secondary" type="submit" formaction="{% url 'bookings:party_pending_print' %}" formtarget="_blank">Print</button>
+      </div>
+    </form>
+
+    {% if party_report_requested %}
+    <div class="row g-3 mt-1">
+      <div class="col-lg-4">
+        <div class="border rounded bg-light h-100 p-3">
+          <div class="text-muted small">Samples booked in selected period</div>
+          <div class="display-6 fw-semibold">{{ total_samples }}</div>
+        </div>
+      </div>
+      <div class="col-lg-8">
+        <div class="table-responsive border rounded h-100">
+          <table class="table table-sm mb-0 align-middle">
+            <thead class="table-light"><tr><th>Party Name</th><th class="text-end">Samples Booked</th></tr></thead>
+            <tbody>
+              {% for row in party_summary %}
+              <tr><td>{{ row.party_name }}</td><td class="text-end fw-semibold">{{ row.sample_count }}</td></tr>
+              {% empty %}
+              <tr><td colspan="2" class="text-center text-muted">No bookings in the selected period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="table-responsive mt-4">
+      <table class="table table-bordered table-sm align-middle mb-0">
+        <thead class="table-light"><tr><th>Sr. No.</th><th>Sample Name</th><th>Batch No.</th><th>Booking No.</th><th>Letter Date</th><th>Booking Date</th><th>Booking Status</th><th>Processing Status</th><th>Party Name</th></tr></thead>
+        <tbody>
+          {% for booking in party_pending_bookings %}
+          <tr>
+            <td>{{ forloop.counter }}</td><td>{{ booking.sample_name.display_name|default:'-' }}</td><td>{{ booking.batch_no|default:'-' }}</td>
+            <td><a href="{% url 'bookings:detail' booking.pk %}">{{ booking.tracking_code }}</a></td>
+            <td>{{ booking.letter_date|date:'d/m/Y'|default:'-' }}</td><td>{{ booking.booking_date|date:'d/m/Y' }}</td>
+            <td><span class="badge text-bg-{% if booking.status == 'pending' %}warning{% else %}success{% endif %}">{{ booking.get_status_display }}</span></td>
+            <td><span class="badge text-bg-{% if booking.party_status == 'Pending' %}warning{% elif booking.party_status == 'Pass' %}success{% elif booking.party_status == 'Draft' %}secondary{% else %}primary{% endif %}">{{ booking.party_status }}</span></td>
+            <td>{{ booking.customer.name|default:'-' }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="9" class="text-center text-muted">No records match the selected filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // The shared header reload button resets this report instead of retaining its query filters.
+  const dataSheetReloadButton = document.getElementById('navReloadBtn');
+  if (dataSheetReloadButton) {
+    dataSheetReloadButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      window.location.href = "{% url 'bookings:data_sheet' %}";
+    }, true);
+  }
+</script>
+{% endblock %}

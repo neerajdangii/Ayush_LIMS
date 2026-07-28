@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 
 from .forms import AdminUserCreateForm, AdminUserUpdateForm, LoginForm
+from .models import UserActivity
 
 
 class UserLoginView(LoginView):
@@ -67,6 +68,40 @@ class AdminUserListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["q"] = (self.request.GET.get("q") or "").strip()
+        return context
+
+
+class UserActivityListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
+    template_name = "accounts/user_activity_list.html"
+    context_object_name = "activities"
+    paginate_by = 50
+
+    def test_func(self):
+        return self.request.user.is_superuser or self.request.user.has_perm("accounts.view_user_activity")
+
+    def handle_no_permission(self):
+        messages.error(self.request, "You do not have permission to view user activity.")
+        return super().handle_no_permission()
+
+    def get_queryset(self):
+        queryset = UserActivity.objects.select_related("user").all()
+        search_by = (self.request.GET.get("search_by") or "who").strip()
+        query = (self.request.GET.get("q") or "").strip()
+        filters = {
+            "user": Q(user__username__icontains=query),
+            "who": Q(user__username__icontains=query) | Q(user__first_name__icontains=query) | Q(user__last_name__icontains=query),
+            "ip": Q(ip_address__icontains=query),
+            "device": Q(user_agent__icontains=query) | Q(browser__icontains=query) | Q(device__icontains=query),
+            "what": Q(path__icontains=query) | Q(activity__icontains=query),
+        }
+        if query and search_by in filters:
+            queryset = queryset.filter(filters[search_by])
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["search_by"] = (self.request.GET.get("search_by") or "who").strip()
+        context["query"] = (self.request.GET.get("q") or "").strip()
         return context
 
 
