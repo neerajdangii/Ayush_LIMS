@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 
+from django.db import DatabaseError, OperationalError, ProgrammingError
 from django.urls import Resolver404, resolve
 
 from .models import UserActivity
@@ -62,15 +63,19 @@ class UserActivityMiddleware:
             ip_address = str(ipaddress.ip_address(ip_address)) if ip_address else None
         except ValueError:
             ip_address = None
-        UserActivity.objects.create(
-            user=user,
-            activity=_activity_label(request),
-            method=request.method,
-            path=request.path[:500],
-            status_code=response.status_code,
-            browser=browser,
-            device=device,
-            user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000],
-            ip_address=ip_address,
-        )
+        try:
+            UserActivity.objects.create(
+                user=user,
+                activity=_activity_label(request),
+                method=request.method,
+                path=request.path[:500],
+                status_code=response.status_code,
+                browser=browser,
+                device=device,
+                user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000],
+                ip_address=ip_address,
+            )
+        except (OperationalError, ProgrammingError, DatabaseError):
+            # Keep the application available while a deployment migration is pending.
+            pass
         return response
