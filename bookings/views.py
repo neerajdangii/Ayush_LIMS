@@ -229,14 +229,20 @@ class BillingBaseView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView)
         context = super().get_context_data(**kwargs)
         customer_id, date_from, date_to, bill_number, booking_number, batch_number, billing_date_from, billing_date_to = _billing_filters(self.request)
         bookings = _billing_bookings(customer_id, date_from, date_to, self.done, bill_number, booking_number, batch_number, billing_date_from, billing_date_to)
+        paginator = Paginator(bookings, 100)
+        billing_page = paginator.get_page(self.request.GET.get("page"))
+        query_params = self.request.GET.copy()
+        query_params.pop("page", None)
         context.update(
             {
-                "billing_bookings": bookings,
+                "billing_bookings": billing_page,
+                "billing_page": billing_page,
+                "billing_query": query_params.urlencode(),
                 "billing_customers": CustomerMaster.objects.order_by("name"),
                 "billing_customer_id": customer_id,
                 "date_from": date_from.isoformat() if date_from else "",
                 "date_to": date_to.isoformat() if date_to else "",
-                "billing_total": bookings.count(),
+                "billing_total": paginator.count,
                 "billing_done": self.done,
                 "bill_number": bill_number,
                 "booking_number": booking_number,

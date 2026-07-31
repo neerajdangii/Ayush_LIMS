@@ -19,6 +19,13 @@
   <tbody>{% for booking in billing_bookings %}<tr><td>{% if perms.bookings.delete_billingrecord %}<input class="form-check-input undo-checkbox" type="checkbox" name="billing_record_ids" value="{{ booking.billing_record.pk }}" aria-label="Select {{ booking.tracking_code }}">{% endif %}</td><td>{{ forloop.counter }}</td><td>{{ booking.sample_name.display_name|default:'-' }}</td><td>{{ booking.batch_no|default:'-' }}</td><td><a href="{% url 'bookings:detail' booking.pk %}">{{ booking.tracking_code }}</a></td><td>{{ booking.billing_record.letter_date|date:'d/m/Y' }}</td><td>{{ booking.booking_date|date:'d/m/Y' }}</td><td>{{ booking.customer.name|default:'Unassigned Party' }}</td><td>{{ booking.billing_record.billing_done_date|date:'d/m/Y' }}</td><td>{{ booking.billing_record.bill_number }}</td><td>{{ booking.billing_record.confirmed_at|date:'d/m/Y H:i' }} {% if perms.bookings.delete_billingrecord %}<button class="btn btn-outline-danger btn-sm ms-1" type="submit" name="undo_one" value="{{ booking.billing_record.pk }}">Undo</button>{% endif %}</td><td>{{ booking.billing_record.confirmed_by.get_full_name|default:booking.billing_record.confirmed_by.username }}</td></tr>{% empty %}<tr><td colspan="12" class="text-center text-muted py-4">No confirmed billing records match these filters.</td></tr>{% endfor %}</tbody></table></div>
   {% if perms.bookings.delete_billingrecord %}<button class="btn btn-outline-danger" type="submit" id="undoSelectedButton" disabled>Undo Selected</button>{% endif %}
   </form>
+  {% if billing_page.paginator.num_pages > 1 %}
+  <nav class="mt-3" aria-label="Billing done pages"><ul class="pagination pagination-sm mb-0">
+    {% if billing_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ billing_query }}{% if billing_query %}&amp;{% endif %}page={{ billing_page.previous_page_number }}">Previous</a></li>{% endif %}
+    <li class="page-item disabled"><span class="page-link">Page {{ billing_page.number }} of {{ billing_page.paginator.num_pages }}</span></li>
+    {% if billing_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ billing_query }}{% if billing_query %}&amp;{% endif %}page={{ billing_page.next_page_number }}">Next</a></li>{% endif %}
+  </ul></nav>
+  {% endif %}
 </div></div>
 {% endblock %}
 {% block extra_js %}<script>
