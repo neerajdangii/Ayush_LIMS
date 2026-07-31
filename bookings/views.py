@@ -6,7 +6,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.paginator import Paginator
-from django.db import DatabaseError, IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse, JsonResponse
@@ -292,7 +292,17 @@ class BillingConfirmView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 return redirect("bookings:billing_pending")
         confirmed = 0
         with transaction.atomic():
-            for booking in Booking.objects.filter(pk__in=[item.pk for item in eligible]).select_related("report").select_for_update():
+            locked_bookings = Booking.objects.filter(pk__in=[item.pk for item in eligible])
+            if getattr(connection.features, "has_select_for_update_of", False):
+                # PostgreSQL can lock only the Booking table while still
+                # eagerly loading the nullable report relationship.
+                locked_bookings = locked_bookings.select_related("report").select_for_update(of=("self",))
+            else:
+                # Older Django/database backends do not support FOR UPDATE OF.
+                # Do not join the nullable report table in that locking query.
+                locked_bookings = locked_bookings.select_for_update()
+
+            for booking in locked_bookings:
                 bill_number = billing_details[str(booking.pk)]
                 letter_date = booking.letter_date
                 billing_done_date = booking.report.analysis_end_date or booking.analysis_end_date
