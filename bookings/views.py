@@ -6,17 +6,21 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.paginator import Paginator
-from django.db import DatabaseError
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse, JsonResponse
 from django.http.response import Http404
 from django.shortcuts import get_object_or_404, redirect
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
+from django.utils import timezone
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
 from reports.models import Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
+from accounts.models import AnnouncementSeen, WelcomeAnnouncement
 
 from .forms import (
     BookingForm,
@@ -31,6 +35,7 @@ from .forms import (
 )
 from .models import (
     Booking,
+    BillingRecord,
     CustomerMaster,
     ManufacturerMaster,
     ProtocolMaster,
@@ -124,6 +129,23 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             {"slug": slug, "title": conf["title"], "count": conf["model"].objects.count()}
             for slug, conf in MASTER_CONFIG.items()
         ]
+        announcement = WelcomeAnnouncement.objects.first()
+        if announcement and announcement.is_current:
+            seen = AnnouncementSeen.objects.filter(announcement=announcement, user=self.request.user)
+            session_key = self.request.session.session_key or ""
+            should_show = (
+                announcement.display_mode in {WelcomeAnnouncement.DisplayMode.LOGIN, "every_login"}
+                and not seen.filter(session_key=session_key).exists()
+                or (announcement.display_mode == WelcomeAnnouncement.DisplayMode.DAILY and not seen.filter(seen_at__date=timezone.localdate()).exists())
+                or (announcement.display_mode == WelcomeAnnouncement.DisplayMode.ONCE and not seen.exists())
+            )
+            context["welcome_announcement"] = announcement if should_show else None
+            if should_show:
+                user_name = self.request.user.get_full_name().strip() or self.request.user.username
+                context["welcome_announcement_title"] = announcement.title.replace("{{ user_name }}", user_name)
+                context["welcome_announcement_message"] = mark_safe(
+                    announcement.message.replace("{{ user_name }}", escape(user_name))
+                )
         return context
 
 
@@ -152,6 +174,218 @@ class DataSheetView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
         context["party_summary"] = _party_booking_summary(bookings) if context["party_report_requested"] else []
         context["total_samples"] = len(bookings) if context["party_report_requested"] else 0
         return context
+
+
+def _billing_filters(request):
+    """Read shared billing party and date filters from a request."""
+    return (
+        request.GET.get("party", "").strip(),
+        _parse_filter_date(request.GET.get("date_from", "")),
+        _parse_filter_date(request.GET.get("date_to", "")),
+        request.GET.get("bill_number", "").strip(),
+        request.GET.get("booking_number", "").strip(),
+        request.GET.get("batch_number", "").strip(),
+        _parse_filter_date(request.GET.get("billing_date_from", "")),
+        _parse_filter_date(request.GET.get("billing_date_to", "")),
+    )
+
+
+def _billing_bookings(customer_id="", date_from=None, date_to=None, done=False, bill_number="", booking_number="", batch_number="", billing_date_from=None, billing_date_to=None):
+    """Passed reports waiting for billing, or records already confirmed as billed."""
+    queryset = Booking.objects.select_related(
+        "customer", "sample_name", "report", "billing_record", "billing_record__confirmed_by"
+    )
+    if done:
+        queryset = queryset.filter(billing_record__isnull=False).order_by("-billing_record__confirmed_at", "-pk")
+    else:
+        queryset = queryset.filter(
+            report__final_outcome=Report.FinalOutcome.PASS,
+            billing_record__isnull=True,
+        ).order_by("-report__updated_at", "-pk")
+    if customer_id:
+        queryset = queryset.filter(customer_id=customer_id)
+    if date_from:
+        queryset = queryset.filter(report__updated_at__date__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(report__updated_at__date__lte=date_to)
+    if done and bill_number:
+        queryset = queryset.filter(billing_record__bill_number__icontains=bill_number)
+    if done and booking_number:
+        queryset = queryset.filter(tracking_code__icontains=booking_number)
+    if done and batch_number:
+        queryset = queryset.filter(batch_no__icontains=batch_number)
+    if done and billing_date_from:
+        queryset = queryset.filter(billing_record__confirmed_at__date__gte=billing_date_from)
+    if done and billing_date_to:
+        queryset = queryset.filter(billing_record__confirmed_at__date__lte=billing_date_to)
+    return queryset
+
+
+class BillingBaseView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
+    permission_required = "bookings.view_billingrecord"
+    done = False
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        customer_id, date_from, date_to, bill_number, booking_number, batch_number, billing_date_from, billing_date_to = _billing_filters(self.request)
+        bookings = _billing_bookings(customer_id, date_from, date_to, self.done, bill_number, booking_number, batch_number, billing_date_from, billing_date_to)
+        context.update(
+            {
+                "billing_bookings": bookings,
+                "billing_customers": CustomerMaster.objects.order_by("name"),
+                "billing_customer_id": customer_id,
+                "date_from": date_from.isoformat() if date_from else "",
+                "date_to": date_to.isoformat() if date_to else "",
+                "billing_total": bookings.count(),
+                "billing_done": self.done,
+                "bill_number": bill_number,
+                "booking_number": booking_number,
+                "batch_number": batch_number,
+                "billing_date_from": billing_date_from.isoformat() if billing_date_from else "",
+                "billing_date_to": billing_date_to.isoformat() if billing_date_to else "",
+            }
+        )
+        return context
+
+
+class BillingPendingView(BillingBaseView):
+    template_name = "bookings/billing_pending.html"
+
+
+class BillingDoneView(BillingBaseView):
+    template_name = "bookings/billing_done.html"
+    done = True
+
+
+class BillingConfirmView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "bookings.add_billingrecord"
+
+    def post(self, request):
+        individual_booking_id = request.POST.get("confirm_one", "").strip()
+        booking_ids = [individual_booking_id] if individual_booking_id else request.POST.getlist("booking_ids")
+        if not booking_ids:
+            messages.warning(request, "Select at least one sample before confirming billing.")
+            return redirect("bookings:billing_pending")
+
+        billing_details = {}
+        for booking_id in booking_ids:
+            bill_number = request.POST.get(f"bill_number_{booking_id}", "").strip()
+            if not bill_number:
+                messages.warning(request, "Each selected sample needs a bill number.")
+                return redirect("bookings:billing_pending")
+            billing_details[str(booking_id)] = bill_number
+
+        if not billing_details:
+            messages.warning(request, "Bill number, letter date, and report complete date are required to confirm billing.")
+            return redirect("bookings:billing_pending")
+
+        eligible = list(_billing_bookings().filter(pk__in=booking_ids))
+        for booking in eligible:
+            if not booking.letter_date or not (booking.report.analysis_end_date or booking.analysis_end_date):
+                messages.warning(request, f"{booking.tracking_code} needs a Letter Date and Complete Date before billing can be confirmed.")
+                return redirect("bookings:billing_pending")
+        confirmed = 0
+        with transaction.atomic():
+            for booking in Booking.objects.filter(pk__in=[item.pk for item in eligible]).select_related("report").select_for_update():
+                bill_number = billing_details[str(booking.pk)]
+                letter_date = booking.letter_date
+                billing_done_date = booking.report.analysis_end_date or booking.analysis_end_date
+                try:
+                    with transaction.atomic():
+                        BillingRecord.objects.create(
+                            booking=booking,
+                            confirmed_by=request.user,
+                            bill_number=bill_number,
+                            letter_date=letter_date,
+                            billing_done_date=billing_done_date,
+                        )
+                    confirmed += 1
+                except IntegrityError:
+                    # Another user may have confirmed the same sample at the same time.
+                    continue
+        if confirmed:
+            messages.success(request, f"Billing confirmed for {confirmed} sample{'s' if confirmed != 1 else ''}.")
+        else:
+            messages.warning(request, "The selected samples are no longer waiting for billing.")
+        return redirect("bookings:billing_pending")
+
+
+class BillingUndoView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "bookings.delete_billingrecord"
+
+    def post(self, request, pk):
+        billing = get_object_or_404(BillingRecord.objects.select_related("booking"), pk=pk)
+        tracking_code = billing.booking.tracking_code
+        billing.delete()
+        messages.success(request, f"Billing confirmation for {tracking_code} was undone and returned to Billing Pending.")
+        return redirect("bookings:billing_done")
+
+
+class BillingUndoSelectedView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "bookings.delete_billingrecord"
+
+    def post(self, request):
+        individual_record_id = request.POST.get("undo_one", "").strip()
+        record_ids = [individual_record_id] if individual_record_id else request.POST.getlist("billing_record_ids")
+        if not record_ids:
+            messages.warning(request, "Tick at least one billing record to undo.")
+            return redirect("bookings:billing_done")
+        deleted, _ = BillingRecord.objects.filter(pk__in=record_ids).delete()
+        if deleted:
+            messages.success(request, f"{deleted} billing confirmation{'s' if deleted != 1 else ''} undone.")
+        return redirect("bookings:billing_done")
+
+
+class BillingExcelView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "bookings.view_billingrecord"
+
+    def get(self, request, state):
+        if state not in {"pending", "done"}:
+            raise Http404
+        customer_id, date_from, date_to, bill_number, booking_number, batch_number, billing_date_from, billing_date_to = _billing_filters(request)
+        done = state == "done"
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="billing-{state}.csv"'
+        response.write("\ufeff")
+        writer = csv.writer(response)
+        headings = ["Sr. No.", "Party Name", "Sample Name", "Batch No.", "Booking No.", "Letter Date", "Complete Date"]
+        if done:
+            headings.extend(["Bill Number", "Billing Confirmed Date", "Confirmed By"])
+        writer.writerow(headings)
+        for index, booking in enumerate(_billing_bookings(customer_id, date_from, date_to, done, bill_number, booking_number, batch_number, billing_date_from, billing_date_to), start=1):
+            letter_date = booking.billing_record.letter_date if done else booking.letter_date
+            report_complete_date = (
+                booking.billing_record.billing_done_date
+                if done
+                else (booking.report.analysis_end_date or booking.analysis_end_date)
+            )
+            row = [
+                index,
+                booking.customer.name if booking.customer_id else "Unassigned Party",
+                booking.sample_name.display_name if booking.sample_name_id else "",
+                booking.batch_no or "",
+                booking.tracking_code,
+                letter_date.strftime("%d/%m/%Y") if letter_date else "",
+                report_complete_date.strftime("%d/%m/%Y") if report_complete_date else "",
+            ]
+            if done:
+                row.extend([
+                    booking.billing_record.bill_number,
+                    booking.billing_record.confirmed_at.strftime("%d/%m/%Y %H:%M"),
+                    booking.billing_record.confirmed_by.get_full_name() or booking.billing_record.confirmed_by.username,
+                ])
+            writer.writerow(row)
+        return response
+
+
+class BillingPrintView(BillingBaseView):
+    template_name = "bookings/billing_print.html"
+
+    def get(self, request, state):
+        if state not in {"pending", "done"}:
+            raise Http404
+        self.done = state == "done"
+        return super().get(request)
 
 
 PARTY_STATUS_OPTIONS = (

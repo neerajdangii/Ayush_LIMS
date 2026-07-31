@@ -83,6 +83,15 @@
         <label class="form-check-label" for="id_can_view_user_activity">User Activity Access</label>
       </div>
 
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_manage_billing }}
+        <label class="form-check-label" for="id_can_manage_billing">Bill Invoice</label>
+      </div>
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_manage_welcome_announcement }}
+        <label class="form-check-label" for="id_can_manage_welcome_announcement">Welcome Announcement</label>
+      </div>
+
       <div class="col-md-12">
         <label class="form-label" for="id_signature_file">Signature file</label>
         {{ form.signature_file }}

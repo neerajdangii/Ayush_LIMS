@@ -171,6 +171,7 @@ def _render_tds_content(content, booking, request, document_type=None, inject_bo
         TDSDocumentTemplate.DocumentType.AC,
         TDSDocumentTemplate.DocumentType.TRF,
         TDSDocumentTemplate.DocumentType.CHECKLIST,
+        TDSDocumentTemplate.DocumentType.CS,
     }
     if document_type not in id_based_documents:
         rendered_content = _fill_tds_booking_labels(rendered_content, booking)
@@ -198,8 +199,6 @@ def _render_tds_content(content, booking, request, document_type=None, inject_bo
         rendered_content = (
             '<div class="tds-trf-document">'
             f"{rendered_content}"
-            '<div class="tds-trf-footer"><span></span><span>Page 1 of 1</span>'
-            '<span>QSF/MSP/71/F01-00</span></div>'
             "</div>"
         )
     if document_type == TDSDocumentTemplate.DocumentType.ADS:
@@ -379,12 +378,14 @@ def _build_tds_job_order_html(content, booking):
         '</div>'
         '<table class="tds-job-tests"><thead><tr><th>Sr. No.</th><th>Test Parameter</th><th>Result</th><th>Specification Limits</th></tr></thead>'
         f'<tbody>{test_rows}</tbody></table>'
+        '<div class="tds-job-footer">'
         '<div class="tds-job-signatures">'
         '<div><strong>Analyzed By</strong><br>(Sign &amp; Date)</div>'
         '<div><strong>Reviewed By</strong><br>(Sign &amp; Date)</div>'
         '<div><strong>Approved By</strong><br>(Sign &amp; Date)</div>'
         '</div>'
         '<div class="tds-job-page"><strong>Page 1 of 1</strong></div>'
+        '</div>'
         '</div>'
     )
 
@@ -889,7 +890,27 @@ def _mark_tds_job_order_footer_tables(content):
         return add_class(block_html, attrs, "tds-job-page-marker", match.group("tag").lower())
 
     content = table_re.sub(replace, content)
-    return page_block_re.sub(replace_page_block, content)
+    content = page_block_re.sub(replace_page_block, content)
+    if re.search(r"\btds-job-footer\b(?!-)", content):
+        return content
+
+    signature_re = (
+        r'<table\b(?=[^>]*\bclass\s*=\s*["\'][^"\']*\btds-job-sign-table\b)[^>]*>.*?</table>'
+    )
+    page_re = (
+        r'(?:<table\b(?=[^>]*\bclass\s*=\s*["\'][^"\']*\btds-job-footer-table\b)[^>]*>.*?</table>'
+        r'|<(?:p|div)\b(?=[^>]*\bclass\s*=\s*["\'][^"\']*\btds-job-page-marker\b)[^>]*>.*?</(?:p|div)>)'
+    )
+    spacer_re = r'(?:\s|&nbsp;|&#160;|<div\b[^>]*style\s*=\s*["\'][^"\']*(?:min-height|height)[^"\']*["\'][^>]*>.*?</div>)*'
+    footer_re = re.compile(
+        rf'(?P<signature>{signature_re})(?P<spacer>{spacer_re})(?P<page>{page_re})',
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return footer_re.sub(
+        r'<div class="tds-job-footer">\g<signature>\g<spacer>\g<page></div>',
+        content,
+        count=1,
+    )
 
 
 def _strip_tds_job_order_empty_tables(content):

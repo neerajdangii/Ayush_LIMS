@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load report_extras %}
+{% load static report_extras %}
 {% block title %}Dashboard | LIMS{% endblock %}
 {% block content %}
 <div class="row g-3 mb-3">
@@ -72,6 +72,19 @@
 </div>
 {% endif %}
 
+{% if perms.bookings.view_billingrecord %}
+<div class="row mb-3">
+  <div class="col-md-3">
+    <div class="card shadow-sm">
+      <div class="card-body py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h6 class="mb-0">Invoice Sheet</h6>
+        <a class="btn btn-primary btn-sm" href="{% url 'bookings:billing_pending' %}">Open Invoice Sheet</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if perms.accounts.view_user_activity %}
 <div class="row mb-3">
   <div class="col-md-3">
@@ -83,6 +96,10 @@
     </div>
   </div>
 </div>
+{% endif %}
+
+{% if user.is_superuser or perms.accounts.manage_welcome_announcement %}
+<div class="row mb-3"><div class="col-md-3"><div class="card shadow-sm"><div class="card-body py-2 d-flex justify-content-between align-items-center"><h6 class="mb-0">Welcome Announcement</h6><a class="btn btn-outline-primary btn-sm" href="{% url 'accounts:welcome_announcement' %}">Configure</a></div></div></div></div>
 {% endif %}
 
 <div class="card shadow-sm">
@@ -120,4 +137,51 @@
   </div>
   {% endif %}
 </div>
+{% endblock %}
+{% block extra_js %}
+{% if welcome_announcement %}
+<style>
+  .welcome-announcement-modal { overflow:hidden; border:0; border-radius:1rem; background:#fff !important; color:#172033 !important; }
+  .welcome-announcement-image { display:block; max-height:220px; object-fit:cover; width:100%; }
+  .welcome-announcement-message { line-height:1.6; }
+  @media (prefers-color-scheme: dark) { .welcome-announcement-modal { background:#20242a !important; color:#f4f6f8 !important; } }
+</style>
+<div class="modal fade" id="welcomeAnnouncement" tabindex="-1" data-allow-close="{{ welcome_announcement.allow_close|yesno:'true,false' }}">
+  <div class="modal-dialog {% if welcome_announcement.presentation == 'page' %}modal-fullscreen{% else %}modal-dialog-centered{% endif %}"><div class="modal-content welcome-announcement-modal">
+    {% if welcome_announcement.image %}<img src="{{ welcome_announcement.image.url }}" class="welcome-announcement-image" alt="Announcement banner">{% endif %}
+    <div class="modal-body p-4">
+      <div class="d-flex align-items-center gap-2 mb-3"><img src="{% static 'img/arlpl_wm.png' %}" alt="ARL" width="34" height="34"><h4 class="mb-0">{{ welcome_announcement_title }}</h4></div>
+      <div class="welcome-announcement-message">{{ welcome_announcement_message }}</div>
+    </div>
+    <div class="modal-footer border-0 pt-0 px-4 pb-4">
+      {% if welcome_announcement.button_text %}
+        {% if welcome_announcement.button_action == 'close' %}<button class="btn btn-primary announcement-close">{{ welcome_announcement.button_text }}</button>
+        {% else %}<a class="btn btn-primary" href="{{ welcome_announcement.button_url }}"{% if welcome_announcement.button_action == 'url' %} target="_blank" rel="noopener"{% endif %}>{{ welcome_announcement.button_text }}</a>{% endif %}
+      {% else %}
+        <a class="btn btn-primary" href="{% url 'dashboard' %}">Get Started</a>
+      {% endif %}
+      {% if welcome_announcement.allow_close %}<button class="btn btn-outline-secondary announcement-close">Close</button>{% endif %}
+    </div>
+  </div></div>
+</div>
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const node = document.getElementById('welcomeAnnouncement');
+    if (!node || !window.bootstrap) return;
+    const modal = new bootstrap.Modal(node, {
+      backdrop: node.dataset.allowClose === 'true' ? true : 'static',
+      keyboard: node.dataset.allowClose === 'true',
+    });
+    const mark = () => fetch('{% url "accounts:announcement_seen" welcome_announcement.pk %}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': '{{ csrf_token }}'},
+    });
+    node.querySelectorAll('.announcement-close').forEach((element) => {
+      element.addEventListener('click', () => modal.hide());
+    });
+    mark();
+    modal.show();
+  });
+</script>
+{% endif %}
 {% endblock %}

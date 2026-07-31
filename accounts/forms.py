@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import Group, Permission, User
 
-from .models import UserProfile
+from .models import UserProfile, WelcomeAnnouncement
 
 
 MASTER_PERMISSION_CODENAMES = [
@@ -37,6 +37,43 @@ def _permission(app_label, codename):
     ).first()
 
 
+def _billing_permissions():
+    return list(Permission.objects.filter(
+        content_type__app_label="bookings",
+        codename__in=["add_billingrecord", "delete_billingrecord", "view_billingrecord"],
+    ))
+
+
+class WelcomeAnnouncementForm(forms.ModelForm):
+    class Meta:
+        model = WelcomeAnnouncement
+        fields = ["announcement_type", "is_active", "title", "message", "image", "button_text", "button_action", "button_url", "start_date", "end_date", "display_mode", "presentation", "allow_close"]
+        widgets = {
+            "announcement_type": forms.TextInput(attrs={"class": "form-control", "placeholder": "Welcome, Good Morning, Launch Party, Maintenance…"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "title": forms.TextInput(attrs={"class": "form-control", "placeholder": "Welcome to ARL LIMS"}),
+            "message": forms.Textarea(attrs={"class": "form-control", "data-editor": "announcement-tinymce", "rows": 10}),
+            "image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
+            "button_text": forms.TextInput(attrs={"class": "form-control", "placeholder": "Get Started"}),
+            "button_action": forms.Select(attrs={"class": "form-select"}),
+            "button_url": forms.TextInput(attrs={"class": "form-control", "placeholder": "https://… or /bookings/"}),
+            "start_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "end_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "display_mode": forms.Select(attrs={"class": "form-select"}),
+            "presentation": forms.Select(attrs={"class": "form-select"}),
+            "allow_close": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def clean_button_url(self):
+        value = (self.cleaned_data.get("button_url") or "").strip()
+        action = self.cleaned_data.get("button_action")
+        if action == WelcomeAnnouncement.ButtonAction.INTERNAL and value and not value.startswith("/"):
+            raise forms.ValidationError("Internal pages must start with /. ")
+        if action == WelcomeAnnouncement.ButtonAction.URL and value and not value.startswith(("https://", "http://")):
+            raise forms.ValidationError("Use a full http:// or https:// URL.")
+        return value
+
+
 class LoginForm(AuthenticationForm):
     username = forms.CharField(widget=forms.TextInput(attrs={"class": "form-control"}))
     password = forms.CharField(widget=forms.PasswordInput(attrs={"class": "form-control"}))
@@ -56,6 +93,8 @@ class AdminUserCreateForm(UserCreationForm):
     can_delete_bookings = forms.BooleanField(required=False, label="Delete Booking Access")
     can_view_data_sheet = forms.BooleanField(required=False, label="Data Sheet Access")
     can_view_user_activity = forms.BooleanField(required=False, label="User Activity Access")
+    can_manage_billing = forms.BooleanField(required=False, label="Bill Invoice")
+    can_manage_welcome_announcement = forms.BooleanField(required=False, label="Welcome Announcement")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -93,6 +132,8 @@ class AdminUserCreateForm(UserCreationForm):
             "can_delete_bookings",
             "can_view_data_sheet",
             "can_view_user_activity",
+            "can_manage_billing",
+            "can_manage_welcome_announcement",
             "signature_file",
             "groups",
             "permissions",
@@ -110,6 +151,8 @@ class AdminUserCreateForm(UserCreationForm):
         self.fields["can_delete_bookings"].widget.attrs["class"] = "form-check-input"
         self.fields["can_view_data_sheet"].widget.attrs["class"] = "form-check-input"
         self.fields["can_view_user_activity"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_billing"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_welcome_announcement"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -124,6 +167,8 @@ class AdminUserCreateForm(UserCreationForm):
         can_delete_bookings = bool(self.cleaned_data.get("can_delete_bookings"))
         can_view_data_sheet = bool(self.cleaned_data.get("can_view_data_sheet"))
         can_view_user_activity = bool(self.cleaned_data.get("can_view_user_activity"))
+        can_manage_billing = bool(self.cleaned_data.get("can_manage_billing"))
+        can_manage_welcome_announcement = bool(self.cleaned_data.get("can_manage_welcome_announcement"))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
         if commit:
             user.save()
@@ -143,6 +188,12 @@ class AdminUserCreateForm(UserCreationForm):
                 user_activity_permission = _permission("accounts", "view_user_activity")
                 if user_activity_permission:
                     selected_permissions.append(user_activity_permission)
+            if can_manage_billing:
+                selected_permissions.extend(_billing_permissions())
+            if can_manage_welcome_announcement:
+                permission = _permission("accounts", "manage_welcome_announcement")
+                if permission:
+                    selected_permissions.append(permission)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
             if user.is_staff:
@@ -173,6 +224,8 @@ class AdminUserUpdateForm(forms.ModelForm):
     can_delete_bookings = forms.BooleanField(required=False, label="Delete Booking Access")
     can_view_data_sheet = forms.BooleanField(required=False, label="Data Sheet Access")
     can_view_user_activity = forms.BooleanField(required=False, label="User Activity Access")
+    can_manage_billing = forms.BooleanField(required=False, label="Bill Invoice")
+    can_manage_welcome_announcement = forms.BooleanField(required=False, label="Welcome Announcement")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -209,6 +262,8 @@ class AdminUserUpdateForm(forms.ModelForm):
             "can_delete_bookings",
             "can_view_data_sheet",
             "can_view_user_activity",
+            "can_manage_billing",
+            "can_manage_welcome_announcement",
             "signature_file",
             "groups",
             "permissions",
@@ -228,6 +283,8 @@ class AdminUserUpdateForm(forms.ModelForm):
         self.fields["can_delete_bookings"].widget.attrs["class"] = "form-check-input"
         self.fields["can_view_data_sheet"].widget.attrs["class"] = "form-check-input"
         self.fields["can_view_user_activity"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_billing"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_welcome_announcement"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -250,6 +307,12 @@ class AdminUserUpdateForm(forms.ModelForm):
             self.fields["can_view_user_activity"].initial = self.instance.user_permissions.filter(
                 content_type__app_label="accounts", codename="view_user_activity"
             ).exists()
+            self.fields["can_manage_billing"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="bookings", codename="view_billingrecord"
+            ).exists()
+            self.fields["can_manage_welcome_announcement"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="accounts", codename="manage_welcome_announcement"
+            ).exists()
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -263,6 +326,8 @@ class AdminUserUpdateForm(forms.ModelForm):
         can_delete_bookings = bool(self.cleaned_data.get("can_delete_bookings"))
         can_view_data_sheet = bool(self.cleaned_data.get("can_view_data_sheet"))
         can_view_user_activity = bool(self.cleaned_data.get("can_view_user_activity"))
+        can_manage_billing = bool(self.cleaned_data.get("can_manage_billing"))
+        can_manage_welcome_announcement = bool(self.cleaned_data.get("can_manage_welcome_announcement"))
         user.is_active = bool(self.cleaned_data.get("is_active", True))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
 
@@ -310,6 +375,12 @@ class AdminUserUpdateForm(forms.ModelForm):
                 user_activity_permission = _permission("accounts", "view_user_activity")
                 if user_activity_permission:
                     selected_permissions.append(user_activity_permission)
+            if can_manage_billing:
+                selected_permissions.extend(_billing_permissions())
+            if can_manage_welcome_announcement:
+                permission = _permission("accounts", "manage_welcome_announcement")
+                if permission:
+                    selected_permissions.append(permission)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
 

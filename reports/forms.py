@@ -509,7 +509,9 @@ class TDSDocumentTemplateForm(forms.ModelForm):
             "test",
             "description",
             "display_mode",
+            "header_content",
             "content",
+            "footer_content",
             "source_file",
             "is_active",
         ]
@@ -526,6 +528,22 @@ class TDSDocumentTemplateForm(forms.ModelForm):
                     "data-editor": "tinymce",
                 }
             ),
+            "header_content": forms.Textarea(
+                attrs={
+                    "class": "form-control tinymce-editor",
+                    "rows": 6,
+                    "data-editor": "tinymce-header",
+                    "placeholder": "Optional header shown on every page",
+                }
+            ),
+            "footer_content": forms.Textarea(
+                attrs={
+                    "class": "form-control tinymce-editor",
+                    "rows": 6,
+                    "data-editor": "tinymce-footer",
+                    "placeholder": "Optional formatted footer, or document number",
+                }
+            ),
             "source_file": forms.ClearableFileInput(attrs={"class": "form-control", "accept": ".doc,.docx,.pdf,.html,.htm,.txt"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
@@ -533,6 +551,8 @@ class TDSDocumentTemplateForm(forms.ModelForm):
             "test": "Test link for ADS",
             "display_mode": "Display Option",
             "content": "Printable Content",
+            "header_content": "Page Header (optional)",
+            "footer_content": "Page Footer / Document Number (optional)",
             "source_file": "Word/PDF Source File",
         }
 

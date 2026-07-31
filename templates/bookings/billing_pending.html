@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Invoice Sheet | LIMS{% endblock %}
+{% block content %}
+<div class="mb-3"><h4 class="mb-0">Invoice Sheet</h4><div class="text-muted small">Passed reports ready for billing</div></div>
+<div class="card shadow-sm"><div class="card-body">
+  <form method="get" class="row g-3 align-items-end mb-3">
+    <div class="col-md-5"><label class="form-label" for="billingParty">Company / Party</label><select class="form-select" id="billingParty" name="party"><option value="">All parties</option>{% for customer in billing_customers %}<option value="{{ customer.pk }}" {% if billing_customer_id == customer.pk|stringformat:'s' %}selected{% endif %}>{{ customer.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-3"><label class="form-label" for="billingDateFrom">From Date</label><input class="form-control" type="date" id="billingDateFrom" name="date_from" value="{{ date_from }}"></div>
+    <div class="col-md-3"><label class="form-label" for="billingDateTo">To Date</label><input class="form-control" type="date" id="billingDateTo" name="date_to" value="{{ date_to }}"></div>
+    <div class="col-md-1 d-grid"><button class="btn btn-primary" type="submit">Search</button></div>
+  </form>
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3"><a class="btn btn-outline-success btn-sm" href="{% url 'bookings:billing_excel' 'pending' %}?{{ request.GET.urlencode }}">Download Excel</a><a class="btn btn-outline-secondary btn-sm" href="{% url 'bookings:billing_print' 'pending' %}?{{ request.GET.urlencode }}" target="_blank">Print</a><a class="btn btn-success btn-sm ms-auto" href="{% url 'bookings:billing_done' %}">Billing Done</a></div>
+  <div class="alert alert-light border py-2 mb-3"><strong>{{ billing_total }}</strong> sample{{ billing_total|pluralize }} ready for billing. Tick a sample, enter its bill number, then confirm it individually or as a selected group.</div>
+  <form method="post" action="{% url 'bookings:billing_confirm' %}" id="billingConfirmForm">{% csrf_token %}
+    <div class="table-responsive"><table class="table table-bordered table-sm align-middle mb-3">
+      <thead class="table-light"><tr><th>Sr. No.</th><th>Sample Name</th><th>Batch No.</th><th>Booking No.</th><th>Letter Date</th><th>Booking Date</th><th>Party Name</th><th>Complete Date</th><th>Bill Number</th><th>Confirm</th><th>Individual</th></tr></thead>
+      <tbody>{% for booking in billing_bookings %}<tr>
+        <td>{{ forloop.counter }}</td><td>{{ booking.sample_name.display_name|default:'-' }}</td><td>{{ booking.batch_no|default:'-' }}</td><td><a href="{% url 'bookings:detail' booking.pk %}">{{ booking.tracking_code }}</a></td>
+        <td>{{ booking.letter_date|date:'d/m/Y'|default:'-' }}</td><td>{{ booking.booking_date|date:'d/m/Y' }}</td><td>{{ booking.customer.name|default:'Unassigned Party' }}</td>
+        <td>{{ booking.report.analysis_end_date|default:booking.analysis_end_date|date:'d/m/Y'|default:'-' }}</td>
+        <td><input class="form-control form-control-sm billing-detail" name="bill_number_{{ booking.pk }}" placeholder="Enter bill no." disabled></td>
+        <td class="text-center"><input class="form-check-input billing-checkbox" type="checkbox" name="booking_ids" value="{{ booking.pk }}" aria-label="Select {{ booking.sample_name.display_name|default:booking.tracking_code }}"></td>
+        <td>{% if perms.bookings.add_billingrecord %}<button class="btn btn-outline-success btn-sm individual-confirm" type="submit" name="confirm_one" value="{{ booking.pk }}" disabled>Confirm</button>{% endif %}</td>
+      </tr>{% empty %}<tr><td colspan="11" class="text-center text-muted py-4">No passed reports are waiting for billing.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if perms.bookings.add_billingrecord %}<button class="btn btn-success" type="submit" id="confirmBillingButton" disabled>Confirm Selected Samples</button>{% endif %}
+  </form>
+</div></div>
+{% endblock %}
+{% block extra_js %}<script>
+  const billingChecks = document.querySelectorAll('.billing-checkbox');
+  const confirmButton = document.getElementById('confirmBillingButton');
+  const updateRow = (checkbox) => {
+    const row = checkbox.closest('tr');
+    row.querySelectorAll('.billing-detail').forEach((input) => { input.disabled = !checkbox.checked; input.required = checkbox.checked; });
+    row.querySelectorAll('.individual-confirm').forEach((button) => { button.disabled = !checkbox.checked; });
+    if (confirmButton) confirmButton.disabled = !Array.from(billingChecks).some((item) => item.checked);
+  };
+  billingChecks.forEach((checkbox) => checkbox.addEventListener('change', () => updateRow(checkbox)));
+</script>{% endblock %}

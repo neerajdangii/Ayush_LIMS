@@ -2,14 +2,18 @@ from django.contrib import messages
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth import get_user_model
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
+from django.core.files.storage import default_storage
+from PIL import Image
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 
-from .forms import AdminUserCreateForm, AdminUserUpdateForm, LoginForm
-from .models import UserActivity
+from .forms import AdminUserCreateForm, AdminUserUpdateForm, LoginForm, WelcomeAnnouncementForm
+from .models import AnnouncementSeen, UserActivity, WelcomeAnnouncement
 
 
 class UserLoginView(LoginView):
@@ -20,6 +24,58 @@ class UserLoginView(LoginView):
 
 class UserLogoutView(LogoutView):
     next_page = reverse_lazy('accounts:login')
+
+
+class WelcomeAnnouncementUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    template_name = "accounts/welcome_announcement_form.html"
+    form_class = WelcomeAnnouncementForm
+    success_url = reverse_lazy("dashboard")
+
+    def test_func(self):
+        return self.request.user.is_superuser or self.request.user.has_perm("accounts.manage_welcome_announcement")
+
+    def get_object(self, queryset=None):
+        announcement = WelcomeAnnouncement.objects.first()
+        if announcement:
+            return announcement
+        return WelcomeAnnouncement(created_by=self.request.user)
+
+    def form_valid(self, form):
+        form.instance.created_by = form.instance.created_by or self.request.user
+        form.instance.full_clean()
+        form.save()
+        messages.success(self.request, "Welcome announcement saved.")
+        return redirect(self.success_url)
+
+
+@require_POST
+def mark_announcement_seen(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False}, status=403)
+    announcement = WelcomeAnnouncement.objects.filter(pk=pk).first()
+    if not announcement:
+        return JsonResponse({"ok": False}, status=404)
+    if not request.session.session_key:
+        request.session.save()
+    AnnouncementSeen.objects.get_or_create(announcement=announcement, user=request.user, session_key=request.session.session_key or "")
+    return JsonResponse({"ok": True})
+
+
+@require_POST
+def announcement_image_upload(request):
+    if not (request.user.is_superuser or request.user.has_perm("accounts.manage_welcome_announcement")):
+        return JsonResponse({"error": "Permission denied."}, status=403)
+    uploaded = request.FILES.get("file")
+    if not uploaded or uploaded.size > 5 * 1024 * 1024:
+        return JsonResponse({"error": "Upload an image smaller than 5 MB."}, status=400)
+    try:
+        image = Image.open(uploaded)
+        image.verify()
+        uploaded.seek(0)
+    except Exception:
+        return JsonResponse({"error": "Upload a valid image file."}, status=400)
+    saved_name = default_storage.save(f"announcements/editor/{uploaded.name}", uploaded)
+    return JsonResponse({"location": default_storage.url(saved_name)})
 
 
 class AdminUserCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):

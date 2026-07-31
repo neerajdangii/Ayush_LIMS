@@ -7,7 +7,8 @@
   @media screen {
     html,
     body {
-      background: #e5e7eb !important;
+      /* Keep the document preview clean; this does not affect printed pages. */
+      background: #fff !important;
       margin: 0 !important;
       padding: 0 !important;
     }
@@ -24,8 +25,8 @@
       box-sizing: border-box;
     }
     .tds-print-sheet {
-      width: min({% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}216mm{% else %}210mm{% endif %}, calc(100% - 16mm));
-      min-height: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}279mm{% else %}297mm{% endif %};
+      width: min({% if document_type == 'ads' %}216mm{% else %}210mm{% endif %}, calc(100% - 16mm));
+      min-height: {% if document_type == 'ads' %}279mm{% else %}297mm{% endif %};
       margin: 0 auto !important;
       padding: {% if document_type == 'ac' %}1.5mm 6.5mm 7mm{% elif document_type == 'job_order' %}13mm 8mm 9mm{% elif document_type == 'checklist' %}1.5mm 6.5mm 7mm{% else %}5mm 7mm{% endif %} !important;
       box-sizing: border-box;
@@ -52,7 +53,8 @@
       font-family: "Times New Roman", Times, serif !important;
       font-size: 10pt !important;
       line-height: 1.15 !important;
-      min-height: 257mm;
+      height: auto !important;
+      min-height: 0 !important;
       position: relative;
     }
     .tds-template-content,
@@ -140,12 +142,39 @@
     background: #fff;
     box-sizing: border-box;
     color: #000;
+    display: flex;
+    flex-direction: column;
     font-family: "Times New Roman", Times, serif;
     min-height: 279mm;
     padding: 7mm;
   }
+  .tds-ads-page-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .tds-ads-page-footer {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 4mm;
+  }
   .tds-ads-print-page + .tds-ads-print-page {
     margin-top: 8mm;
+  }
+  /* Paste this class into an optional TinyMCE footer when the document
+     number needs custom formatting. */
+  .tds-custom-page-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    width: 100%;
+  }
+  .tds-footer-page-number {
+    text-align: center;
+  }
+  .tds-footer-document-number {
+    font-weight: 700;
+    text-align: right;
   }
   .tds-ads-page-number {
     font-family: "Times New Roman", Times, serif;
@@ -176,13 +205,37 @@
   }
   {% if document_type == 'checklist' %}
   .tds-template-content {
+    box-sizing: border-box;
     font-family: Arial, Helvetica, sans-serif;
     font-size: 16px;
     line-height: 1.15;
+    /* 97.5% is the largest checklist scale that fits on one A4 page. */
+    min-height: 295.9mm;
+    position: relative;
+    zoom: 0.975;
+  }
+  /* Use this class on the final TinyMCE footer div. */
+  .tds-template-content .tds-checklist-page-footer {
+    bottom: 8mm;
+    display: grid;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 12pt;
+    grid-template-columns: 1fr 1fr 1fr;
+    left: 0;
+    position: absolute;
+    right: 0;
+  }
+  .tds-template-content .tds-checklist-page-footer b:first-child {
+    grid-column: 2;
+    text-align: center;
+  }
+  .tds-template-content .tds-checklist-page-footer b:last-child {
+    grid-column: 3;
+    text-align: right;
   }
   .tds-sample-checklist {
     box-sizing: border-box;
-    min-height: 270.5mm;
+    min-height: 288.5mm;
     position: relative;
   }
   .tds-template-content .tds-sample-checklist table {
@@ -358,7 +411,8 @@
     font-family: "Times New Roman", Times, serif !important;
     font-size: 10pt !important;
     line-height: 1.15 !important;
-    min-height: 257mm;
+    height: 262mm;
+    min-height: 0;
     position: relative;
   }
   .tds-template-content,
@@ -431,7 +485,8 @@
     font-family: "Times New Roman", Times, serif;
     font-size: 10pt;
     line-height: 1.15;
-    min-height: 257mm;
+    height: 262mm;
+    min-height: 0;
     padding-bottom: 42mm;
     position: relative;
   }
@@ -551,6 +606,52 @@
     font-size: 10pt;
     position: absolute;
     right: 0;
+    text-align: center;
+  }
+  .tds-template-content {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 8mm;
+  }
+  .tds-template-content > .tds-job-order {
+    box-sizing: border-box;
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    min-height: 100%;
+    padding-bottom: 0;
+  }
+  .tds-template-content .tds-job-footer {
+    break-inside: avoid;
+    display: flex;
+    flex-direction: column;
+    margin-top: auto;
+    page-break-inside: avoid;
+  }
+  .tds-template-content .tds-job-footer > div[style*="min-height"] {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .tds-template-content .tds-job-footer .tds-job-signatures,
+  .tds-template-content .tds-job-footer .tds-job-sign-table {
+    bottom: auto;
+    left: auto;
+    margin: 0 !important;
+    position: static;
+    right: auto;
+  }
+  .tds-template-content .tds-job-footer .tds-job-signatures > div:first-child {
+    text-align: left !important;
+  }
+  .tds-template-content .tds-job-footer .tds-job-page,
+  .tds-template-content .tds-job-footer .tds-job-page-marker,
+  .tds-template-content .tds-job-footer .tds-job-footer-table {
+    bottom: auto;
+    left: auto;
+    margin: 5mm 0 0 !important;
+    position: static;
+    right: auto;
     text-align: center;
   }
   {% endif %}
@@ -802,7 +903,7 @@
   }
   {% endif %}
   @media print {
-    /* Keep Job Order signatures anchored to the bottom; normalize other document footers. */
+    /* Normalize document footers for print. */
     .tds-template-content .tds-check-sign-table,
     .tds-template-content .tds-check-footer-table,
     .tds-template-content .tds-job-page-marker {
@@ -816,27 +917,8 @@
       padding-bottom: 0 !important;
       position: static !important;
     }
-    .tds-template-content .tds-job-signatures {
-      bottom: 22mm !important;
-      left: 0 !important;
-      position: fixed !important;
-      right: 0 !important;
-    }
-    .tds-template-content .tds-job-signatures > div {
-      font-family: "Times New Roman", Times, serif !important;
-      font-size: 10pt !important;
-    }
-    .tds-template-content .tds-job-page {
-      bottom: 8mm !important;
-      left: 0 !important;
-      font-family: "Times New Roman", Times, serif !important;
-      font-size: 10pt !important;
-      position: fixed !important;
-      right: 0 !important;
-      text-align: center !important;
-    }
     @page {
-      size: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}Letter{% else %}A4{% endif %};
+      size: {% if document_type == 'ads' %}Letter{% else %}A4{% endif %};
       margin: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}0{% else %}8mm{% endif %};
     }
     html, body, main.app-shell, .tds-print-sheet, .tds-print-sheet .card-body {
@@ -888,7 +970,7 @@
       line-height: 1.15 !important;
     }
     .tds-sample-checklist {
-      min-height: 270.5mm;
+      min-height: 288.5mm;
       position: relative;
     }
     .tds-template-content .tds-sample-checklist td,
@@ -940,7 +1022,8 @@
       font-family: "Times New Roman", Times, serif !important;
       font-size: 10pt !important;
       line-height: 1.15 !important;
-      min-height: 257mm;
+      height: auto !important;
+      min-height: 0 !important;
       position: relative;
     }
     .tds-template-content,
@@ -949,11 +1032,11 @@
       font-size: 10pt !important;
     }
     .tds-template-content table {
-      margin: 0 0 8px !important;
+      margin: 0 0 4px !important;
     }
     .tds-template-content th,
     .tds-template-content td {
-      padding: 2px 3px !important;
+      padding: 1px 3px !important;
       vertical-align: middle !important;
     }
     .tds-template-content table:first-of-type td,
@@ -964,12 +1047,49 @@
       max-height: 58px !important;
       object-fit: contain;
     }
-    .tds-template-content .tds-job-sign-table {
-      bottom: 22mm;
-      left: 0;
+    /*
+     * Job Order footer: keep it in normal flow and let flex consume only the
+     * unused page height.  This makes signatures independent of TinyMCE
+     * spacer divs and lets a genuinely long order continue onto later pages.
+     */
+    .tds-template-content {
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex-direction: column !important;
+      padding-bottom: 8mm !important;
+    }
+    .tds-template-content > .tds-job-order {
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex: 1 0 auto !important;
+      flex-direction: column !important;
+      min-height: 100% !important;
+      padding-bottom: 0 !important;
+    }
+    .tds-template-content > div[style*="min-height"],
+    .tds-template-content > .tds-job-order > div[style*="min-height"],
+    .tds-template-content .tds-job-footer > div[style*="min-height"] {
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    .tds-template-content .tds-job-footer {
+      bottom: 9mm !important;
+      break-inside: avoid !important;
+      display: flex !important;
+      flex-direction: column !important;
+      left: 8mm !important;
       margin: 0 !important;
-      position: absolute;
-      right: 0;
+      page-break-inside: avoid !important;
+      position: fixed !important;
+      right: 8mm !important;
+      z-index: 1;
+    }
+    .tds-template-content .tds-job-sign-table {
+      bottom: auto !important;
+      left: auto !important;
+      margin: 0 !important;
+      position: static !important;
+      right: auto !important;
       width: 100% !important;
     }
     .tds-template-content .tds-job-sign-table td {
@@ -985,59 +1105,89 @@
       border: 0 !important;
     }
     .tds-template-content .tds-job-footer-table {
-      bottom: 8mm;
-      left: 0;
-      margin: 0 !important;
-      position: absolute;
-      right: 0;
+      bottom: auto !important;
+      left: auto !important;
+      margin: 5mm 0 0 !important;
+      position: static !important;
+      right: auto !important;
       text-align: center;
       width: 100% !important;
     }
     .tds-template-content .tds-job-page-marker {
-      bottom: 8mm;
+      bottom: auto !important;
       font-weight: 700;
-      left: 0;
-      margin: 0 !important;
-      position: absolute;
-      right: 0;
+      left: auto !important;
+      margin: 5mm 0 0 !important;
+      position: static !important;
+      right: auto !important;
       text-align: center;
     }
     .tds-template-content .tds-job-order {
       font-family: "Times New Roman", Times, serif !important;
       font-size: 10pt !important;
       line-height: 1.15 !important;
-      min-height: 257mm;
-      padding-bottom: 42mm;
-      position: relative;
+      height: 262mm;
+      min-height: 0;
+      position: static;
     }
     .tds-template-content .tds-job-order,
     .tds-template-content .tds-job-order * {
       font-family: "Times New Roman", Times, serif !important;
       font-size: 10pt !important;
     }
-    .tds-template-content .tds-job-order table:last-of-type {
-      bottom: auto;
-      left: auto;
-      margin: 0 0 9px !important;
-      position: static;
-      right: auto;
-      width: 100% !important;
-    }
     .tds-template-content .tds-job-order td,
     .tds-template-content .tds-job-order th {
       font-family: "Times New Roman", Times, serif !important;
       font-size: 10pt !important;
-      padding: 3px 4px !important;
+      padding: 2px 4px !important;
     }
     .tds-template-content .tds-job-tests .tds-job-test-row,
     .tds-template-content .tds-job-tests .tds-job-test-row td {
-      height: 7mm !important;
+      height: 6mm !important;
     }
-    .tds-job-signatures {
-      bottom: 22mm;
+    .tds-template-content .tds-job-signatures {
+      bottom: auto !important;
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      left: auto !important;
+      margin: 0 !important;
+      position: static !important;
+      right: auto !important;
     }
-    .tds-job-page {
-      bottom: 8mm;
+    .tds-template-content .tds-job-signatures > div {
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 10pt !important;
+    }
+    .tds-template-content .tds-job-page {
+      bottom: auto !important;
+      left: auto !important;
+      margin: 5mm 0 0 !important;
+      position: static !important;
+      right: auto !important;
+      text-align: center !important;
+    }
+    .tds-template-content .tds-job-footer,
+    .tds-template-content .tds-job-signatures,
+    .tds-template-content .tds-job-sign-table,
+    .tds-template-content .tds-job-footer-table,
+    .tds-template-content .tds-job-page,
+    .tds-template-content .tds-job-page-marker {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+    section,
+    section .tds-template-content {
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+    .tds-template-content .tds-job-tests,
+    .tds-template-content .tds-job-tests tbody {
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+    .tds-template-content .tds-job-tests tr {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
     }
     {% endif %}
     {% if document_type == 'ads' %}
@@ -1045,7 +1195,8 @@
       padding: 0 !important;
     }
     .tds-ads-print-page {
-      display: block;
+      display: flex !important;
+      flex-direction: column;
       margin: 0 !important;
       break-inside: avoid;
       page-break-inside: avoid;
@@ -1098,6 +1249,44 @@
       page-break-inside: avoid;
       break-inside: avoid;
     }
+    {% if document_type == 'ac' %}
+    /* AC is a single A4 checklist: let its long table use the remaining page space. */
+    .tds-template-content .tds-ac-document {
+      font-size: 10px !important;
+      line-height: 1.05 !important;
+    }
+    .tds-template-content table.tds-ac-checklist,
+    .tds-template-content table.tds-ac-checklist tbody {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-template-content .tds-ac-document td,
+    .tds-template-content .tds-ac-document th {
+      padding: 1px 2px !important;
+    }
+    .tds-template-content .tds-ac-checklist th,
+    .tds-template-content .tds-ac-checklist td {
+      height: 14px !important;
+    }
+    .tds-template-content .tds-ac-note,
+    .tds-template-content .tds-ac-sign,
+    .tds-template-content .tds-ac-footer {
+      font-size: 12px !important;
+    }
+    {% endif %}
+    {% if document_type == 'checklist' %}
+    /* Keep the printed checklist at the normal document font size. */
+    .tds-template-content {
+      font-size: 12px !important;
+      line-height: 1.15 !important;
+      /* Printer minimum margins reduce the printable page height. */
+      min-height: 0 !important;
+    }
+    .tds-template-content .tds-checklist-page-footer {
+      bottom: 8mm !important;
+      position: fixed !important;
+    }
+    {% endif %}
   }
 </style>
 {% endblock %}
@@ -1125,7 +1314,7 @@
           {% endif %}
           <div class="tds-ads-page-body">
             {% if page.header %}
-            <div class="tds-template-content">{{ page.header|safe }}</div>
+            <div class="tds-template-content tds-ads-page-header">{{ page.header|safe }}</div>
             {% endif %}
             {% if page.source_preview.kind == "pdf" and page.source_preview.url %}
             <object class="tds-source-frame" data="{{ page.source_preview.url }}" type="application/pdf">
@@ -1140,10 +1329,10 @@
               <a href="{{ page.source_preview.url }}" target="_blank" rel="noopener">Open uploaded file</a>
             </div>
             {% else %}
-            <div class="tds-template-content">{{ page.content|strip_hfb|safe }}</div>
+            <div class="tds-template-content tds-ads-page-content">{{ page.content|strip_hfb|safe }}</div>
             {% endif %}
             {% if page.footer %}
-            <div class="tds-template-content">{{ page.footer|safe }}</div>
+            <div class="tds-template-content tds-ads-page-footer">{{ page.footer|safe }}</div>
             {% endif %}
           </div>
         </section>
@@ -1157,6 +1346,10 @@
       <section{% if document_type == 'ads' %} class="tds-ads-body-section"{% endif %}>
         {% if can_edit_tds_template %}
         <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
+        {% endif %}
+
+        {% if item.header_content %}
+        <div class="tds-template-content tds-master-page-header">{{ item.header_content|safe }}</div>
         {% endif %}
 
         {% if item.use_source_file %}
@@ -1198,6 +1391,9 @@
           Source file: <a href="{{ item.template.source_file.url }}" target="_blank" rel="noopener">open uploaded file</a>
           {% endif %}
         </div>
+        {% endif %}
+        {% if item.footer_content %}
+        <div class="tds-template-content tds-master-page-footer">{{ item.footer_content|safe }}</div>
         {% endif %}
       </section>
       {% endfor %}

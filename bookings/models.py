@@ -308,3 +308,30 @@ class Booking(models.Model):
 
     def __str__(self) -> str:
         return self.sample_reg_no or self.tracking_code or f"Booking-{self.pk}"
+
+
+class BillingRecord(models.Model):
+    """Audit entry created when a passed report is confirmed for billing."""
+
+    booking = models.OneToOneField(
+        Booking,
+        on_delete=models.PROTECT,
+        related_name="billing_record",
+    )
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="confirmed_billings",
+    )
+    confirmed_at = models.DateTimeField(default=timezone.now)
+    bill_number = models.CharField(max_length=100)
+    letter_date = models.DateField(null=True, blank=True)
+    billing_done_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-confirmed_at", "-pk"]
+        verbose_name = "Billing record"
+        verbose_name_plural = "Billing records"
+
+    def __str__(self) -> str:
+        return f"Billing: {self.booking.tracking_code}"

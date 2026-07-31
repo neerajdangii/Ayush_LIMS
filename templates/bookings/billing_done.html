@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Billing Done | LIMS{% endblock %}
+{% block content %}
+<div class="mb-3"><h4 class="mb-0">Billing Done</h4><div class="text-muted small">Confirmed invoice records</div></div>
+<div class="card shadow-sm"><div class="card-body">
+  <form method="get" class="row g-3 align-items-end mb-3">
+    <div class="col-md-4"><label class="form-label" for="billingParty">Company / Party</label><select class="form-select" id="billingParty" name="party"><option value="">All parties</option>{% for customer in billing_customers %}<option value="{{ customer.pk }}" {% if billing_customer_id == customer.pk|stringformat:'s' %}selected{% endif %}>{{ customer.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label" for="bookingNumber">Booking Number</label><input class="form-control" id="bookingNumber" name="booking_number" value="{{ booking_number }}"></div>
+    <div class="col-md-2"><label class="form-label" for="batchNumber">Batch Number</label><input class="form-control" id="batchNumber" name="batch_number" value="{{ batch_number }}"></div>
+    <div class="col-md-2"><label class="form-label" for="billingDoneFrom">From Date</label><input class="form-control" type="date" id="billingDoneFrom" name="billing_date_from" value="{{ billing_date_from }}"></div>
+    <div class="col-md-2"><label class="form-label" for="billingDoneTo">To Date</label><input class="form-control" type="date" id="billingDoneTo" name="billing_date_to" value="{{ billing_date_to }}"></div>
+    <div class="col-md-3"><label class="form-label" for="billNumber">Bill Number</label><input class="form-control" id="billNumber" name="bill_number" value="{{ bill_number }}"></div>
+    <div class="col-md-2 d-grid"><button class="btn btn-primary" type="submit">Search</button></div>
+  </form>
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3"><a class="btn btn-outline-success btn-sm" href="{% url 'bookings:billing_excel' 'done' %}?{{ request.GET.urlencode }}">Download Excel</a><a class="btn btn-outline-secondary btn-sm" href="{% url 'bookings:billing_print' 'done' %}?{{ request.GET.urlencode }}" target="_blank">Print</a><a class="btn btn-primary btn-sm ms-auto" href="{% url 'bookings:billing_pending' %}">Billing Pending</a></div>
+  <div class="alert alert-light border py-2 mb-3"><strong>{{ billing_total }}</strong> confirmed billing record{{ billing_total|pluralize }}. Tick records to undo them together.</div>
+  <form method="post" action="{% url 'bookings:billing_undo_selected' %}" id="bulkUndoForm">{% csrf_token %}
+  <div class="table-responsive"><table class="table table-bordered table-sm align-middle mb-3"><thead class="table-light"><tr><th><input class="form-check-input" type="checkbox" id="undoSelectAll" aria-label="Select all"></th><th>Sr. No.</th><th>Sample Name</th><th>Batch No.</th><th>Booking No.</th><th>Letter Date</th><th>Booking Date</th><th>Party Name</th><th>Complete Date</th><th>Bill Number</th><th>Billing Confirmed Date / Undo</th><th>Confirmed By</th></tr></thead>
+  <tbody>{% for booking in billing_bookings %}<tr><td>{% if perms.bookings.delete_billingrecord %}<input class="form-check-input undo-checkbox" type="checkbox" name="billing_record_ids" value="{{ booking.billing_record.pk }}" aria-label="Select {{ booking.tracking_code }}">{% endif %}</td><td>{{ forloop.counter }}</td><td>{{ booking.sample_name.display_name|default:'-' }}</td><td>{{ booking.batch_no|default:'-' }}</td><td><a href="{% url 'bookings:detail' booking.pk %}">{{ booking.tracking_code }}</a></td><td>{{ booking.billing_record.letter_date|date:'d/m/Y' }}</td><td>{{ booking.booking_date|date:'d/m/Y' }}</td><td>{{ booking.customer.name|default:'Unassigned Party' }}</td><td>{{ booking.billing_record.billing_done_date|date:'d/m/Y' }}</td><td>{{ booking.billing_record.bill_number }}</td><td>{{ booking.billing_record.confirmed_at|date:'d/m/Y H:i' }} {% if perms.bookings.delete_billingrecord %}<button class="btn btn-outline-danger btn-sm ms-1" type="submit" name="undo_one" value="{{ booking.billing_record.pk }}">Undo</button>{% endif %}</td><td>{{ booking.billing_record.confirmed_by.get_full_name|default:booking.billing_record.confirmed_by.username }}</td></tr>{% empty %}<tr><td colspan="12" class="text-center text-muted py-4">No confirmed billing records match these filters.</td></tr>{% endfor %}</tbody></table></div>
+  {% if perms.bookings.delete_billingrecord %}<button class="btn btn-outline-danger" type="submit" id="undoSelectedButton" disabled>Undo Selected</button>{% endif %}
+  </form>
+</div></div>
+{% endblock %}
+{% block extra_js %}<script>
+  const undoChecks = document.querySelectorAll('.undo-checkbox');
+  const undoAll = document.getElementById('undoSelectAll');
+  const undoButton = document.getElementById('undoSelectedButton');
+  const updateUndoButton = () => { if (undoButton) undoButton.disabled = !Array.from(undoChecks).some((checkbox) => checkbox.checked); };
+  if (undoAll) undoAll.addEventListener('change', () => { undoChecks.forEach((checkbox) => { checkbox.checked = undoAll.checked; }); updateUndoButton(); });
+  undoChecks.forEach((checkbox) => checkbox.addEventListener('change', updateUndoButton));
+</script>{% endblock %}

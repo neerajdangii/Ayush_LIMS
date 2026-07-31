@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Welcome Announcement | LIMS{% endblock %}
+{% block extra_head %}
+<script>
+  const arlStaticPrefix = "/static/";
+  window.tinyMCEPreInit = {
+    base: `${arlStaticPrefix}js/tinymce`,
+    baseURL: `${arlStaticPrefix}js/tinymce`,
+    suffix: ".min"
+  };
+  window.arlTinyMceConfig = {
+    baseUrl: `${arlStaticPrefix}js/tinymce`,
+    skinUrl: `${arlStaticPrefix}js/tinymce/skins/ui/oxide`,
+    contentCss: "{% static 'js/tinymce/skins/content/default/content.min.css' %}"
+  };
+</script>
+<script src="{% static 'js/tinymce/tinymce.min.js' %}"></script>
+{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-header"><h5 class="mb-0">Welcome Announcement</h5></div>
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data" id="announcement-form" class="row g-3">
+      {% csrf_token %}
+      <div class="col-md-6">{{ form.announcement_type.label_tag }}{{ form.announcement_type }}</div>
+      <div class="col-md-6 d-flex align-items-end"><div class="form-check">{{ form.is_active }} {{ form.is_active.label_tag }}</div></div>
+      <div class="col-12">{{ form.title.label_tag }}{{ form.title }}{{ form.title.errors }}</div>
+      <div class="col-12">{{ form.message.label_tag }}{{ form.message }}{{ form.message.errors }}</div>
+      <div class="col-md-6">{{ form.image.label_tag }}{{ form.image }}{{ form.image.errors }}</div>
+      <div class="col-md-6"><div class="form-check mt-4">{{ form.allow_close }} {{ form.allow_close.label_tag }}</div></div>
+      <div class="col-md-4">{{ form.button_text.label_tag }}{{ form.button_text }}</div>
+      <div class="col-md-4">{{ form.button_action.label_tag }}{{ form.button_action }}</div>
+      <div class="col-md-4">{{ form.button_url.label_tag }}{{ form.button_url }}{{ form.button_url.errors }}</div>
+      <div class="col-md-4">{{ form.start_date.label_tag }}{{ form.start_date }}</div>
+      <div class="col-md-4">{{ form.end_date.label_tag }}{{ form.end_date }}{{ form.end_date.errors }}</div>
+      <div class="col-md-4">{{ form.display_mode.label_tag }}{{ form.display_mode }}<div class="form-text">Choose how often each user sees this active announcement.</div></div>
+      <div class="col-md-4">{{ form.presentation.label_tag }}{{ form.presentation }}</div>
+      <div class="col-12 d-flex gap-2"><button class="btn btn-primary">Save announcement</button><button class="btn btn-outline-secondary" type="button" id="announcement-preview">Preview</button></div>
+    </form>
+  </div>
+</div>
+<script>
+  tinymce.init({
+    base_url: window.arlTinyMceConfig.baseUrl,
+    suffix: '.min',
+    skin_url: window.arlTinyMceConfig.skinUrl,
+    content_css: window.arlTinyMceConfig.contentCss,
+    selector:'textarea[data-editor="announcement-tinymce"]',
+    height:300,
+    plugins:'lists link image code table',
+    toolbar:'undo redo | blocks fontfamily fontsize | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist | link image table | user_name | code',
+    menubar:'file edit view insert format table tools',
+    convert_urls:false,
+    license_key: 'gpl',
+    images_upload_url: '{% url "accounts:announcement_image_upload" %}',
+    images_upload_credentials: true,
+    images_upload_handler: (blobInfo) => new Promise((resolve, reject) => {
+      const data = new FormData(); data.append('file', blobInfo.blob(), blobInfo.filename());
+      fetch('{% url "accounts:announcement_image_upload" %}', {method:'POST', headers:{'X-CSRFToken':'{{ csrf_token }}'}, body:data})
+        .then(r => r.json()).then(data => data.location ? resolve(data.location) : reject(data.error || 'Upload failed'))
+        .catch(() => reject('Upload failed'));
+    }),
+    setup: (editor) => {
+      editor.ui.registry.addButton('user_name', {
+        text: 'User name',
+        tooltip: 'Insert the logged-in user name',
+        onAction: () => editor.insertContent('{% verbatim %}{{ user_name }}{% endverbatim %}'),
+      });
+    },
+  });
+  document.getElementById('announcement-form').addEventListener('submit', () => tinymce.triggerSave());
+  document.getElementById('announcement-preview').addEventListener('click', () => { tinymce.triggerSave(); const message=document.getElementById('{{ form.message.id_for_label }}').value; const title=document.getElementById('{{ form.title.id_for_label }}').value || 'Welcome'; const win=window.open('', '_blank', 'width=650,height=600'); win.document.write(`<main style="font:16px system-ui;padding:32px"><h1>${title.replace(/[<>&]/g, '')}</h1>${message}</main>`); });
+</script>
+{% endblock %}

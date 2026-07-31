@@ -66,11 +66,32 @@
         <div class="text-muted small mt-1" id="source-file-help">Editable mode imports DOCX/HTML/TXT into the editor. Uploaded-file mode converts Word to PDF for display without changing the editor content.</div>
       </div>
       <div class="col-12" id="tds-content-field">
+        <label for="{{ form.header_content.id_for_label }}">{{ form.header_content.label }}</label>
+        {{ form.header_content }}
+        {{ form.header_content.errors }}
+        <div class="text-muted small mt-1">Optional. Paste or format a header here; it is repeated on every page. Leave it empty when the master has no header.</div>
+      </div>
+      <div class="col-12" id="tds-content-field">
         <label for="{{ form.content.id_for_label }}">Printable Content</label>
         {{ form.content }}
         {{ form.content.errors }}
         <div class="text-muted small mt-1">
           {% verbatim %}You can use booking placeholders such as {{ sample_name }}, {{ sample_number }}, {{ batch_no }}, {{ sample_reg_no }}, {{ customer_name }}, {{ sample_receipt_date }}. Use [[page_break]] where this master should continue on the next numbered page.{% endverbatim %}
+        </div>
+      </div>
+      <div class="col-12">
+        <label for="{{ form.footer_content.id_for_label }}">{{ form.footer_content.label }}</label>
+        {{ form.footer_content }}
+        {{ form.footer_content.errors }}
+        <div class="text-muted small mt-1">
+          Optional. Use this TinyMCE area to paste and format the footer. It stays at the bottom of every page. Open the <strong>Code</strong> button and paste the footer layout below to keep Page X of Y in the centre and the document number on the right.
+          <pre class="mt-2 mb-0"><code>{% verbatim %}&lt;div class="tds-custom-page-footer"&gt;
+  &lt;div&gt;&lt;/div&gt;
+  &lt;div class="tds-footer-page-number"&gt;
+    Page &lt;span class="tds-page-current"&gt;&lt;/span&gt; of &lt;span class="tds-page-total"&gt;&lt;/span&gt;
+  &lt;/div&gt;
+  &lt;div class="tds-footer-document-number"&gt;QSF/MSP/7.4/F10-00&lt;/div&gt;
+&lt;/div&gt;{% endverbatim %}</code></pre>
         </div>
       </div>
       </div>
@@ -94,14 +115,14 @@
   (function () {
     let tries = 0;
 
-    function editorConfig() {
+    function editorConfig(selector, height) {
       return {
         base_url: window.arlTinyMceConfig.baseUrl,
         suffix: '.min',
         skin_url: window.arlTinyMceConfig.skinUrl,
         content_css: window.arlTinyMceConfig.contentCss,
-        selector: 'textarea[data-editor="tinymce"]',
-        height: 620,
+        selector: selector,
+        height: height,
         menubar: 'file edit view insert format table tools',
         branding: false,
         convert_urls: false,
@@ -228,8 +249,10 @@
     
 
     function initEditor() {
-      const target = document.querySelector('textarea[data-editor="tinymce"]');
-      if (!target) {
+      const targets = document.querySelectorAll(
+        'textarea[data-editor="tinymce"], textarea[data-editor="tinymce-header"], textarea[data-editor="tinymce-footer"]'
+      );
+      if (!targets.length) {
         return;
       }
       if (!window.tinymce || typeof window.tinymce.init !== 'function') {
@@ -239,10 +262,13 @@
         }
         return;
       }
-      if (window.tinymce.get(target.id)) {
-        return;
-      }
-      window.tinymce.init(editorConfig());
+      targets.forEach(function (target) {
+        if (window.tinymce.get(target.id)) {
+          return;
+        }
+        const isSmallEditor = target.dataset.editor === 'tinymce-header' || target.dataset.editor === 'tinymce-footer';
+        window.tinymce.init(editorConfig(`#${target.id}`, isSmallEditor ? 240 : 620));
+      });
 
       const form = document.getElementById('tds-template-form');
       const saveButton = document.getElementById('tds-template-save-btn');
