@@ -1286,7 +1286,31 @@
       bottom: 8mm !important;
       position: fixed !important;
     }
+    /* Do not move a complete checklist to the next page just because one
+       table row no longer fits. Rows stay intact, but the table can flow. */
+    .tds-print-sheet section,
+    .tds-print-sheet section .tds-template-content,
+    .tds-print-sheet .tds-template-content table,
+    .tds-print-sheet .tds-template-content table tbody {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-print-sheet .tds-template-content table tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
     {% endif %}
+    /* A footer entered in TDS Master consumes the unused page space, so it
+       stays at the bottom without changing the content above it. */
+    .tds-master-print-page {
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 280mm;
+    }
+    .tds-master-print-page .tds-master-page-footer {
+      flex: 0 0 auto;
+      margin-top: auto !important;
+    }
   }
 </style>
 {% endblock %}
@@ -1343,7 +1367,7 @@
         {% endfor %}
       {% else %}
       {% for item in rendered_templates %}
-      <section{% if document_type == 'ads' %} class="tds-ads-body-section"{% endif %}>
+      <section class="{% if document_type == 'ads' %}tds-ads-body-section{% endif %}{% if item.footer_content %} tds-master-print-page{% endif %}">
         {% if can_edit_tds_template %}
         <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
         {% endif %}

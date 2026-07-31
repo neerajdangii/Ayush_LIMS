@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}System Settings | LIMS{% endblock %}
+{% block content %}
+<div class="card shadow-sm"><div class="card-header"><h5 class="mb-0">System Settings</h5></div><div class="card-body">
+  <form method="post" class="row g-3">{% csrf_token %}
+    <div class="col-12"><div class="form-check">{{ form.login_enabled }} {{ form.login_enabled.label_tag }}</div><div class="form-text">When disabled, no new user can log in. Keep an administrator session open so this can be enabled again.</div></div>
+    <div class="col-md-5">{{ form.session_timeout_minutes.label_tag }}{{ form.session_timeout_minutes }}<div class="form-text">Minutes of inactivity before logout. Enter 0 to disable.</div>{{ form.session_timeout_minutes.errors }}</div>
+    <div class="col-12"><button class="btn btn-primary">Save Settings</button><a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Cancel</a></div>
+  </form>
+</div></div>
+{% endblock %}

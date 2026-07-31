@@ -12,14 +12,24 @@ from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 
-from .forms import AdminUserCreateForm, AdminUserUpdateForm, LoginForm, WelcomeAnnouncementForm
-from .models import AnnouncementSeen, UserActivity, WelcomeAnnouncement
+from .forms import AdminUserCreateForm, AdminUserUpdateForm, LoginForm, SystemSettingForm, WelcomeAnnouncementForm
+from .models import AnnouncementSeen, SystemSetting, UserActivity, WelcomeAnnouncement
 
 
 class UserLoginView(LoginView):
     template_name = 'registration/login.html'
     authentication_form = LoginForm
     redirect_authenticated_user = True
+
+    def dispatch(self, request, *args, **kwargs):
+        from django.db import DatabaseError
+        try:
+            if request.method == "POST" and not SystemSetting.current().login_enabled:
+                messages.error(request, "Login is currently disabled by the administrator.")
+                return redirect("accounts:login")
+        except DatabaseError:
+            pass
+        return super().dispatch(request, *args, **kwargs)
 
 
 class UserLogoutView(LogoutView):
@@ -46,6 +56,22 @@ class WelcomeAnnouncementUpdateView(LoginRequiredMixin, UserPassesTestMixin, Upd
         form.save()
         messages.success(self.request, "Welcome announcement saved.")
         return redirect(self.success_url)
+
+
+class SystemSettingUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    template_name = "accounts/system_settings_form.html"
+    form_class = SystemSettingForm
+    success_url = reverse_lazy("dashboard")
+
+    def test_func(self):
+        return self.request.user.is_superuser or self.request.user.has_perm("accounts.manage_system_settings")
+
+    def get_object(self, queryset=None):
+        return SystemSetting.current()
+
+    def form_valid(self, form):
+        messages.success(self.request, "System settings saved.")
+        return super().form_valid(form)
 
 
 @require_POST

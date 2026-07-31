@@ -134,7 +134,7 @@
         table_default_attributes: { border: '1', style: 'border-collapse:collapse;width:100%;' },
         plugins: 'lists table link code advlist charmap searchreplace wordcount preview visualblocks',
         toolbar_sticky: true,
-        toolbar: 'undo redo | blocks fontfamily fontsize lineheight | bold italic underline | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | table | removeformat code preview',
+        toolbar: 'undo redo | blocks fontfamily fontsize lineheight | bold italic underline | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | table | removeformat{% if perms.accounts.edit_tinymce_source %} code{% endif %} preview',
         font_family_formats: 'Calibri=calibri,arial,sans-serif;Arial=arial,helvetica,sans-serif;Times New Roman=times new roman,times,serif;Courier New=courier new,courier,monospace',
         license_key: 'gpl'
       };

@@ -9,6 +9,7 @@ from .views import (
     UserLoginView,
     UserLogoutView,
     WelcomeAnnouncementUpdateView,
+    SystemSettingUpdateView,
     mark_announcement_seen,
     announcement_image_upload,
 )
@@ -24,6 +25,7 @@ urlpatterns = [
     path('users/<int:pk>/edit/', AdminUserUpdateView.as_view(), name='user_edit'),
     path('users/<int:pk>/delete/', AdminUserDeleteView.as_view(), name='user_delete'),
     path('welcome-announcement/', WelcomeAnnouncementUpdateView.as_view(), name='welcome_announcement'),
+    path('system-settings/', SystemSettingUpdateView.as_view(), name='system_settings'),
     path('welcome-announcement/<int:pk>/seen/', mark_announcement_seen, name='announcement_seen'),
     path('welcome-announcement/upload-image/', announcement_image_upload, name='announcement_image_upload'),
 ]

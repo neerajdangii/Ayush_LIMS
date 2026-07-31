@@ -122,3 +122,22 @@ class AnnouncementSeen(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["announcement", "user"]), models.Index(fields=["announcement", "session_key"])]
+
+
+class SystemSetting(models.Model):
+    """Singleton-style settings that control login access and idle sessions."""
+
+    login_enabled = models.BooleanField(default=True)
+    session_timeout_minutes = models.PositiveIntegerField(default=0, help_text="Use 0 to disable automatic logout.")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        permissions = [
+            ("manage_system_settings", "Can manage system settings"),
+            ("edit_tinymce_source", "Can edit TinyMCE source code"),
+        ]
+
+    @classmethod
+    def current(cls):
+        setting, _ = cls.objects.get_or_create(pk=1)
+        return setting

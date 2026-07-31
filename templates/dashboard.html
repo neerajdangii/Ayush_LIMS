@@ -101,6 +101,9 @@
 {% if user.is_superuser or perms.accounts.manage_welcome_announcement %}
 <div class="row mb-3"><div class="col-md-3"><div class="card shadow-sm"><div class="card-body py-2 d-flex justify-content-between align-items-center"><h6 class="mb-0">Welcome Announcement</h6><a class="btn btn-outline-primary btn-sm" href="{% url 'accounts:welcome_announcement' %}">Configure</a></div></div></div></div>
 {% endif %}
+{% if user.is_superuser or perms.accounts.manage_system_settings %}
+<div class="row mb-3"><div class="col-md-3"><div class="card shadow-sm"><div class="card-body py-2 d-flex justify-content-between align-items-center"><h6 class="mb-0">System Settings</h6><a class="btn btn-outline-primary btn-sm" href="{% url 'accounts:system_settings' %}">Configure</a></div></div></div></div>
+{% endif %}
 
 <div class="card shadow-sm">
   <div class="card-header d-flex justify-content-between align-items-center">
@@ -142,9 +145,18 @@
 {% if welcome_announcement %}
 <style>
   .welcome-announcement-modal { overflow:hidden; border:0; border-radius:1rem; background:#fff !important; color:#172033 !important; }
+  .welcome-announcement-modal .modal-body,
+  .welcome-announcement-modal .modal-body h1,
+  .welcome-announcement-modal .modal-body h2,
+  .welcome-announcement-modal .modal-body h3,
+  .welcome-announcement-modal .modal-body h4,
+  .welcome-announcement-modal .modal-body h5,
+  .welcome-announcement-modal .modal-body h6,
+  .welcome-announcement-modal .modal-body p,
+  .welcome-announcement-modal .modal-body li,
+  .welcome-announcement-modal .modal-body span { color:#172033 !important; }
   .welcome-announcement-image { display:block; max-height:220px; object-fit:cover; width:100%; }
   .welcome-announcement-message { line-height:1.6; }
-  @media (prefers-color-scheme: dark) { .welcome-announcement-modal { background:#20242a !important; color:#f4f6f8 !important; } }
 </style>
 <div class="modal fade" id="welcomeAnnouncement" tabindex="-1" data-allow-close="{{ welcome_announcement.allow_close|yesno:'true,false' }}">
   <div class="modal-dialog {% if welcome_announcement.presentation == 'page' %}modal-fullscreen{% else %}modal-dialog-centered{% endif %}"><div class="modal-content welcome-announcement-modal">

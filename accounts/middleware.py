@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import ipaddress
+import time
 
+from django.contrib import messages
+from django.contrib.auth import logout
 from django.db import DatabaseError, OperationalError, ProgrammingError
+from django.shortcuts import redirect
 from django.urls import Resolver404, resolve
 
-from .models import UserActivity
+from .models import SystemSetting, UserActivity
 
 
 def _browser_and_device(user_agent: str) -> tuple[str, str]:
@@ -49,6 +53,19 @@ class UserActivityMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        user = getattr(request, "user", None)
+        if getattr(user, "is_authenticated", False) and not request.path.startswith(("/static/", "/media/", "/accounts/logout/")):
+            try:
+                timeout_minutes = SystemSetting.current().session_timeout_minutes
+                now = time.time()
+                last_activity = request.session.get("system_last_activity")
+                if timeout_minutes and last_activity and now - last_activity >= timeout_minutes * 60:
+                    logout(request)
+                    messages.warning(request, "Your session ended because it was inactive.")
+                    return redirect("accounts:login")
+                request.session["system_last_activity"] = now
+            except (OperationalError, ProgrammingError, DatabaseError):
+                pass
         response = self.get_response(request)
         user = getattr(request, "user", None)
         if not getattr(user, "is_authenticated", False):

@@ -49,7 +49,7 @@
     selector:'textarea[data-editor="announcement-tinymce"]',
     height:300,
     plugins:'lists link image code table',
-    toolbar:'undo redo | blocks fontfamily fontsize | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist | link image table | user_name | code',
+    toolbar:'undo redo | blocks fontfamily fontsize | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist | link image table | user_name{% if perms.accounts.edit_tinymce_source %} | code{% endif %}',
     menubar:'file edit view insert format table tools',
     convert_urls:false,
     license_key: 'gpl',

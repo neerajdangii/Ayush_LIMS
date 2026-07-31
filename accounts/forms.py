@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import Group, Permission, User
 
-from .models import UserProfile, WelcomeAnnouncement
+from .models import SystemSetting, UserProfile, WelcomeAnnouncement
 
 
 MASTER_PERMISSION_CODENAMES = [
@@ -74,6 +74,16 @@ class WelcomeAnnouncementForm(forms.ModelForm):
         return value
 
 
+class SystemSettingForm(forms.ModelForm):
+    class Meta:
+        model = SystemSetting
+        fields = ["login_enabled", "session_timeout_minutes"]
+        widgets = {
+            "login_enabled": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "session_timeout_minutes": forms.NumberInput(attrs={"class": "form-control", "min": 0, "max": 10080}),
+        }
+
+
 class LoginForm(AuthenticationForm):
     username = forms.CharField(widget=forms.TextInput(attrs={"class": "form-control"}))
     password = forms.CharField(widget=forms.PasswordInput(attrs={"class": "form-control"}))
@@ -95,6 +105,8 @@ class AdminUserCreateForm(UserCreationForm):
     can_view_user_activity = forms.BooleanField(required=False, label="User Activity Access")
     can_manage_billing = forms.BooleanField(required=False, label="Bill Invoice")
     can_manage_welcome_announcement = forms.BooleanField(required=False, label="Welcome Announcement")
+    can_manage_system_settings = forms.BooleanField(required=False, label="System Settings")
+    can_edit_tinymce_source = forms.BooleanField(required=False, label="TinyMCE Source Code")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -134,6 +146,7 @@ class AdminUserCreateForm(UserCreationForm):
             "can_view_user_activity",
             "can_manage_billing",
             "can_manage_welcome_announcement",
+            "can_manage_system_settings", "can_edit_tinymce_source",
             "signature_file",
             "groups",
             "permissions",
@@ -153,6 +166,8 @@ class AdminUserCreateForm(UserCreationForm):
         self.fields["can_view_user_activity"].widget.attrs["class"] = "form-check-input"
         self.fields["can_manage_billing"].widget.attrs["class"] = "form-check-input"
         self.fields["can_manage_welcome_announcement"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_system_settings"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_edit_tinymce_source"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -169,6 +184,8 @@ class AdminUserCreateForm(UserCreationForm):
         can_view_user_activity = bool(self.cleaned_data.get("can_view_user_activity"))
         can_manage_billing = bool(self.cleaned_data.get("can_manage_billing"))
         can_manage_welcome_announcement = bool(self.cleaned_data.get("can_manage_welcome_announcement"))
+        can_manage_system_settings = bool(self.cleaned_data.get("can_manage_system_settings"))
+        can_edit_tinymce_source = bool(self.cleaned_data.get("can_edit_tinymce_source"))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
         if commit:
             user.save()
@@ -192,6 +209,14 @@ class AdminUserCreateForm(UserCreationForm):
                 selected_permissions.extend(_billing_permissions())
             if can_manage_welcome_announcement:
                 permission = _permission("accounts", "manage_welcome_announcement")
+                if permission:
+                    selected_permissions.append(permission)
+            if can_manage_system_settings:
+                permission = _permission("accounts", "manage_system_settings")
+                if permission:
+                    selected_permissions.append(permission)
+            if can_edit_tinymce_source:
+                permission = _permission("accounts", "edit_tinymce_source")
                 if permission:
                     selected_permissions.append(permission)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
@@ -226,6 +251,8 @@ class AdminUserUpdateForm(forms.ModelForm):
     can_view_user_activity = forms.BooleanField(required=False, label="User Activity Access")
     can_manage_billing = forms.BooleanField(required=False, label="Bill Invoice")
     can_manage_welcome_announcement = forms.BooleanField(required=False, label="Welcome Announcement")
+    can_manage_system_settings = forms.BooleanField(required=False, label="System Settings")
+    can_edit_tinymce_source = forms.BooleanField(required=False, label="TinyMCE Source Code")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -264,6 +291,7 @@ class AdminUserUpdateForm(forms.ModelForm):
             "can_view_user_activity",
             "can_manage_billing",
             "can_manage_welcome_announcement",
+            "can_manage_system_settings", "can_edit_tinymce_source",
             "signature_file",
             "groups",
             "permissions",
@@ -285,6 +313,8 @@ class AdminUserUpdateForm(forms.ModelForm):
         self.fields["can_view_user_activity"].widget.attrs["class"] = "form-check-input"
         self.fields["can_manage_billing"].widget.attrs["class"] = "form-check-input"
         self.fields["can_manage_welcome_announcement"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_system_settings"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_edit_tinymce_source"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -313,6 +343,12 @@ class AdminUserUpdateForm(forms.ModelForm):
             self.fields["can_manage_welcome_announcement"].initial = self.instance.user_permissions.filter(
                 content_type__app_label="accounts", codename="manage_welcome_announcement"
             ).exists()
+            self.fields["can_manage_system_settings"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="accounts", codename="manage_system_settings"
+            ).exists()
+            self.fields["can_edit_tinymce_source"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="accounts", codename="edit_tinymce_source"
+            ).exists()
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -328,6 +364,8 @@ class AdminUserUpdateForm(forms.ModelForm):
         can_view_user_activity = bool(self.cleaned_data.get("can_view_user_activity"))
         can_manage_billing = bool(self.cleaned_data.get("can_manage_billing"))
         can_manage_welcome_announcement = bool(self.cleaned_data.get("can_manage_welcome_announcement"))
+        can_manage_system_settings = bool(self.cleaned_data.get("can_manage_system_settings"))
+        can_edit_tinymce_source = bool(self.cleaned_data.get("can_edit_tinymce_source"))
         user.is_active = bool(self.cleaned_data.get("is_active", True))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
 
@@ -379,6 +417,14 @@ class AdminUserUpdateForm(forms.ModelForm):
                 selected_permissions.extend(_billing_permissions())
             if can_manage_welcome_announcement:
                 permission = _permission("accounts", "manage_welcome_announcement")
+                if permission:
+                    selected_permissions.append(permission)
+            if can_manage_system_settings:
+                permission = _permission("accounts", "manage_system_settings")
+                if permission:
+                    selected_permissions.append(permission)
+            if can_edit_tinymce_source:
+                permission = _permission("accounts", "edit_tinymce_source")
                 if permission:
                     selected_permissions.append(permission)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}

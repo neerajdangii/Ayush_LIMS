@@ -144,7 +144,7 @@
       const fullConfig = Object.assign(buildTemplateEditorConfig(), {
         plugins: 'lists table link code advlist charmap searchreplace wordcount preview',
         toolbar_sticky: true,
-        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | table | removeformat code preview',
+        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | table | removeformat{% if perms.accounts.edit_tinymce_source %} code{% endif %} preview',
         font_family_formats: 'Helvetica=helvetica,arial,sans-serif;Times New Roman=times new roman,times,serif;Calibri=calibri,sans-serif;Courier New=courier new,courier,monospace',
         table_responsive_width: true,
         license_key: 'gpl',
@@ -177,7 +177,7 @@
         try {
           window.tinymce.init(Object.assign(buildTemplateEditorConfig(), {
             plugins: 'lists table link code advlist',
-            toolbar: 'undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist | table | code'
+            toolbar: 'undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist | table{% if perms.accounts.edit_tinymce_source %} | code{% endif %}'
           }));
         } catch (fallbackError) {
           console.error('Minimal template TinyMCE init failed.', fallbackError);
