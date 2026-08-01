@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, models
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.db.models.functions import Cast
 from django.utils import timezone
 
@@ -178,23 +178,28 @@ class Booking(models.Model):
 
     @property
     def certificate_no(self) -> str:
-        source_date = self.sample_receipt_date or self.booking_date
-        if not source_date:
+        # Certificate serials are assigned by Sample Receipt Date and reset
+        # for each receipt date, independently of registration numbers.
+        uses_receipt_date = bool(self.sample_receipt_date)
+        receipt_date = self.sample_receipt_date or self.booking_date
+        if not receipt_date:
             return "-"
 
-        if hasattr(source_date, "tzinfo") and timezone.is_aware(source_date):
-            source_date = timezone.localtime(source_date)
+        if timezone.is_aware(receipt_date):
+            receipt_date = timezone.localtime(receipt_date)
 
-        reg_no = self.sample_reg_no or ""
-        try:
-            sequence = int(reg_no.rsplit("/", 1)[-1])
-        except (TypeError, ValueError):
-            try:
-                sequence = int(self.tracking_code)
-            except (TypeError, ValueError):
-                sequence = self.pk or 1
+        if not self.pk:
+            sequence = 1
+        else:
+            date_field = "sample_receipt_date" if uses_receipt_date else "booking_date"
+            sequence = Booking.objects.filter(
+                **{f"{date_field}__date": receipt_date.date()},
+            ).filter(
+                Q(**{f"{date_field}__lt": receipt_date})
+                | Q(**{date_field: receipt_date, "pk__lte": self.pk})
+            ).count()
 
-        return f"ARL/{self.booking_type_code}/{source_date.strftime('%y%m%d')}{sequence:03d}"
+        return f"ARL/{self.booking_type_code}/{receipt_date.strftime('%y%m%d')}{sequence:03d}"
 
     @property
     def sample_registration_no(self) -> str:
@@ -335,3 +340,21 @@ class BillingRecord(models.Model):
 
     def __str__(self) -> str:
         return f"Billing: {self.booking.tracking_code}"
+
+
+class BillingUndoRecord(models.Model):
+    """Audit history for a billing confirmation that was undone."""
+
+    booking = models.ForeignKey(Booking, on_delete=models.PROTECT, related_name="billing_undo_records")
+    bill_number = models.CharField(max_length=100)
+    letter_date = models.DateField(null=True, blank=True)
+    billing_done_date = models.DateField(null=True, blank=True)
+    confirmed_at = models.DateTimeField()
+    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="confirmed_billing_undo_records")
+    undone_at = models.DateTimeField(default=timezone.now)
+    undone_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="undone_billing_records")
+
+    class Meta:
+        ordering = ["-undone_at", "-pk"]
+        verbose_name = "Billing undo record"
+        verbose_name_plural = "Billing undo records"

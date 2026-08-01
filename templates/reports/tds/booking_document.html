@@ -162,6 +162,23 @@
   .tds-ads-print-page + .tds-ads-print-page {
     margin-top: 8mm;
   }
+  /* Non-ADS TDS masters use an explicit page layout too: their header and
+     footer never become part of the editable body flow. */
+  .tds-master-print-page {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-height: 285mm;
+  }
+  .tds-master-page-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .tds-master-page-footer {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 4mm;
+  }
   /* Paste this class into an optional TinyMCE footer when the document
      number needs custom formatting. */
   .tds-custom-page-footer {
@@ -1367,24 +1384,17 @@
         {% endfor %}
       {% else %}
       {% for item in rendered_templates %}
-      <section class="{% if document_type == 'ads' %}tds-ads-body-section{% endif %}{% if item.footer_content %} tds-master-print-page{% endif %}">
+      {% if item.use_source_file %}
+      <section class="tds-master-print-page">
         {% if can_edit_tds_template %}
         <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
         {% endif %}
-
         {% if item.header_content %}
         <div class="tds-template-content tds-master-page-header">{{ item.header_content|safe }}</div>
         {% endif %}
-
-        {% if item.use_source_file %}
+        <div class="tds-master-page-body">
           {% if item.source_preview.kind == "html" and item.source_preview.content %}
-          <div class="tds-template-content">
-            {% if document_type == 'ads' %}
-              {{ item.source_preview.content|strip_hfb|safe }}
-            {% else %}
-              {{ item.source_preview.content|strip_hfb|safe }}
-            {% endif %}
-          </div>
+          <div class="tds-template-content">{{ item.source_preview.content|strip_hfb|safe }}</div>
           {% elif item.source_preview.kind == "pdf" and item.source_preview.url %}
           <object class="tds-source-frame" data="{{ item.source_preview.url }}" type="application/pdf">
             <div class="alert alert-info py-2 mb-0">
@@ -1400,26 +1410,25 @@
           {% else %}
           <div class="alert alert-info py-2 mb-0">Uploaded source file is missing.</div>
           {% endif %}
-        {% elif item.content %}
-        <div class="tds-template-content">
-          {% if document_type == 'ads' %}
-            {{ item.content|strip_hfb|safe }}
-          {% else %}
-            {{ item.content|strip_hfb|safe }}
-          {% endif %}
         </div>
-        {% else %}
-        <div class="alert alert-info py-2 mb-0">
-          Printable content is empty.
-          {% if item.template.source_file %}
-          Source file: <a href="{{ item.template.source_file.url }}" target="_blank" rel="noopener">open uploaded file</a>
-          {% endif %}
-        </div>
-        {% endif %}
         {% if item.footer_content %}
         <div class="tds-template-content tds-master-page-footer">{{ item.footer_content|safe }}</div>
         {% endif %}
       </section>
+      {% else %}
+        {% for page in item.pages %}
+        <section class="tds-master-print-page">
+          {% if can_edit_tds_template and forloop.first %}
+          <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
+          {% endif %}
+          {% if item.header_content %}<div class="tds-template-content tds-master-page-header">{{ item.header_content|safe }}</div>{% endif %}
+          <div class="tds-master-page-body"><div class="tds-template-content">{{ page|strip_hfb|safe }}</div></div>
+          {% if item.footer_content %}<div class="tds-template-content tds-master-page-footer">{{ item.footer_content|safe }}</div>{% endif %}
+        </section>
+        {% empty %}
+        <section class="tds-master-print-page"><div class="alert alert-info py-2 mb-0">Printable content is empty.</div></section>
+        {% endfor %}
+      {% endif %}
       {% endfor %}
 
       {% for item in fallback_ads_templates %}

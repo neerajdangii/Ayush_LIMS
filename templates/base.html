@@ -42,7 +42,10 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'accounts:user_list' %}">Users</a></li>
           {% endif %}
         </ul>
-        <span class="text-white me-3">{{ user.username }}</span>
+        <span class="text-white me-2">{{ user.username }}</span>
+        {% if request.session.system_timeout_minutes %}
+        <span class="badge text-bg-light me-3" id="sessionTimeoutTimer" data-minutes="{{ request.session.system_timeout_minutes }}">Session: --:--</span>
+        {% endif %}
         <form method="post" action="{% url 'accounts:logout' %}">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm btn-outline-light">Logout</button>
@@ -63,6 +66,23 @@
 
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    const sessionTimeoutTimer = document.getElementById('sessionTimeoutTimer');
+    if (sessionTimeoutTimer) {
+      let remainingSeconds = Number(sessionTimeoutTimer.dataset.minutes) * 60;
+      const updateSessionTimer = () => {
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        sessionTimeoutTimer.textContent = `Session: ${minutes}:${String(seconds).padStart(2, '0')}`;
+        if (remainingSeconds <= 0) {
+          window.location.assign('{% url "accounts:login" %}');
+          return;
+        }
+        remainingSeconds -= 1;
+        window.setTimeout(updateSessionTimer, 1000);
+      };
+      updateSessionTimer();
+    }
+
     const navBackBtn = document.getElementById('navBackBtn');
     const navReloadBtn = document.getElementById('navReloadBtn');
 

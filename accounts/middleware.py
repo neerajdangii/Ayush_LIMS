@@ -3,7 +3,6 @@ from __future__ import annotations
 import ipaddress
 import time
 
-from django.contrib import messages
 from django.contrib.auth import logout
 from django.db import DatabaseError, OperationalError, ProgrammingError
 from django.shortcuts import redirect
@@ -61,9 +60,14 @@ class UserActivityMiddleware:
                 last_activity = request.session.get("system_last_activity")
                 if timeout_minutes and last_activity and now - last_activity >= timeout_minutes * 60:
                     logout(request)
-                    messages.warning(request, "Your session ended because it was inactive.")
                     return redirect("accounts:login")
-                request.session["system_last_activity"] = now
+                if timeout_minutes:
+                    # Only a request handled by the server renews this timer.
+                    request.session["system_last_activity"] = now
+                    request.session["system_timeout_minutes"] = timeout_minutes
+                else:
+                    request.session.pop("system_last_activity", None)
+                    request.session.pop("system_timeout_minutes", None)
             except (OperationalError, ProgrammingError, DatabaseError):
                 pass
         response = self.get_response(request)

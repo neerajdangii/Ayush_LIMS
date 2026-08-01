@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.paginator import Paginator
 from django.db import DatabaseError, IntegrityError, connection, transaction
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse, JsonResponse
 from django.http.response import Http404
@@ -36,6 +36,7 @@ from .forms import (
 from .models import (
     Booking,
     BillingRecord,
+    BillingUndoRecord,
     CustomerMaster,
     ManufacturerMaster,
     ProtocolMaster,
@@ -201,6 +202,13 @@ def _billing_bookings(customer_id="", date_from=None, date_to=None, done=False, 
         queryset = queryset.filter(
             report__final_outcome=Report.FinalOutcome.PASS,
             billing_record__isnull=True,
+        ).annotate(
+            previous_bill_number=Subquery(
+                BillingUndoRecord.objects.filter(booking_id=OuterRef("pk"))
+                .order_by("-undone_at", "-pk")
+                .values("bill_number")[:1]
+            ),
+            was_billing_undone=Exists(BillingUndoRecord.objects.filter(booking_id=OuterRef("pk"))),
         ).order_by("-report__updated_at", "-pk")
     if customer_id:
         queryset = queryset.filter(customer_id=customer_id)
@@ -229,7 +237,7 @@ class BillingBaseView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView)
         context = super().get_context_data(**kwargs)
         customer_id, date_from, date_to, bill_number, booking_number, batch_number, billing_date_from, billing_date_to = _billing_filters(self.request)
         bookings = _billing_bookings(customer_id, date_from, date_to, self.done, bill_number, booking_number, batch_number, billing_date_from, billing_date_to)
-        paginator = Paginator(bookings, 100)
+        paginator = Paginator(bookings, 50)
         billing_page = paginator.get_page(self.request.GET.get("page"))
         query_params = self.request.GET.copy()
         query_params.pop("page", None)
@@ -332,7 +340,13 @@ class BillingUndoView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def post(self, request, pk):
         billing = get_object_or_404(BillingRecord.objects.select_related("booking"), pk=pk)
         tracking_code = billing.booking.tracking_code
-        billing.delete()
+        with transaction.atomic():
+            BillingUndoRecord.objects.create(
+                booking=billing.booking, bill_number=billing.bill_number, letter_date=billing.letter_date,
+                billing_done_date=billing.billing_done_date, confirmed_at=billing.confirmed_at,
+                confirmed_by=billing.confirmed_by, undone_by=request.user,
+            )
+            billing.delete()
         messages.success(request, f"Billing confirmation for {tracking_code} was undone and returned to Billing Pending.")
         return redirect("bookings:billing_done")
 
@@ -346,10 +360,43 @@ class BillingUndoSelectedView(LoginRequiredMixin, PermissionRequiredMixin, View)
         if not record_ids:
             messages.warning(request, "Tick at least one billing record to undo.")
             return redirect("bookings:billing_done")
-        deleted, _ = BillingRecord.objects.filter(pk__in=record_ids).delete()
+        with transaction.atomic():
+            records = list(BillingRecord.objects.select_related("booking").filter(pk__in=record_ids))
+            BillingUndoRecord.objects.bulk_create([
+                BillingUndoRecord(
+                    booking=record.booking, bill_number=record.bill_number, letter_date=record.letter_date,
+                    billing_done_date=record.billing_done_date, confirmed_at=record.confirmed_at,
+                    confirmed_by=record.confirmed_by, undone_by=request.user,
+                )
+                for record in records
+            ])
+            deleted, _ = BillingRecord.objects.filter(pk__in=[record.pk for record in records]).delete()
         if deleted:
             messages.success(request, f"{deleted} billing confirmation{'s' if deleted != 1 else ''} undone.")
         return redirect("bookings:billing_done")
+
+
+class BillingUndoHistoryView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    permission_required = "bookings.view_billingrecord"
+    template_name = "bookings/billing_undo_history.html"
+    context_object_name = "undo_records"
+    paginate_by = 50
+
+    def get_queryset(self):
+        query = self.request.GET.get("q", "").strip()
+        queryset = BillingUndoRecord.objects.select_related("booking", "booking__customer", "undone_by")
+        if query:
+            queryset = queryset.filter(
+                Q(bill_number__icontains=query)
+                | Q(booking__tracking_code__icontains=query)
+                | Q(booking__customer__name__icontains=query)
+            )
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["q"] = self.request.GET.get("q", "").strip()
+        return context
 
 
 class BillingExcelView(LoginRequiredMixin, PermissionRequiredMixin, View):
@@ -741,6 +788,36 @@ class BookingDeleteView(PermissionRequiredMixin, DeleteView):
             return redirect("bookings:detail", pk=self.object.pk)
         messages.success(self.request, f"Booking {booking_id} deleted.")
         return response
+
+
+class BookingBulkDeleteView(PermissionRequiredMixin, View):
+    """Delete selected bookings while preserving the existing protection rules."""
+
+    permission_required = "bookings.delete_booking"
+
+    def post(self, request):
+        booking_ids = request.POST.getlist("booking_ids")
+        if not booking_ids:
+            messages.warning(request, "Select at least one booking to delete.")
+            return redirect("bookings:list")
+
+        deleted = 0
+        protected = []
+        for booking in Booking.objects.filter(pk__in=booking_ids):
+            try:
+                booking.delete()
+                deleted += 1
+            except ProtectedError:
+                protected.append(booking.tracking_code)
+
+        if deleted:
+            messages.success(request, f"Deleted {deleted} booking{'s' if deleted != 1 else ''}.")
+        if protected:
+            messages.warning(
+                request,
+                f"Could not delete protected booking{'s' if len(protected) != 1 else ''}: {', '.join(protected)}.",
+            )
+        return redirect("bookings:list")
 
 
 class BookingApproveView(RoleRequiredMixin, PermissionRequiredMixin, View):
