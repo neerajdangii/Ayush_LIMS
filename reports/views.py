@@ -23,6 +23,7 @@ from django.utils.html import escape, strip_tags
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, TemplateView, UpdateView, View
 from django.utils.decorators import method_decorator
 
+from accounts.models import SystemSetting
 from bookings.models import Booking
 from bookings.permissions import RoleRequiredMixin, has_role
 
@@ -1814,6 +1815,13 @@ class COAEditView(PermissionRequiredMixin, RoleRequiredMixin, UpdateView):
             }
             for report in previous_reports[:20]
         ]
+        # expose system setting for whether manual certificate editing is allowed
+        try:
+            from accounts.models import SystemSetting
+
+            context["allow_manual_certificate_no"] = SystemSetting.current().allow_manual_certificate_no
+        except Exception:
+            context["allow_manual_certificate_no"] = False
         return context
 
     def get_success_url(self):
@@ -1897,6 +1905,13 @@ class COAOptionView(PermissionRequiredMixin, RoleRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         report = self.object
         preview_url = reverse("reports:coa_print", kwargs={"pk": report.pk})
+        mode = SystemSetting.current().certificate_numbering_mode
+        context["certificate_numbering_mode"] = mode
+        context["certificate_numbering_mode_label"] = SystemSetting.CertificateNumberingMode(mode).label
+        context["can_manage_system_settings"] = (
+            self.request.user.is_superuser or self.request.user.has_perm("accounts.manage_system_settings")
+        )
+        context["system_settings_url"] = reverse("accounts:system_settings")
         context["report_options"] = [
             {
                 "title": "Certificate of Analysis",

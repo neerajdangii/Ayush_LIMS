@@ -129,7 +129,8 @@ class Booking(models.Model):
     uom = models.ForeignKey(UOMMaster, on_delete=models.PROTECT, related_name="bookings", null=True, blank=True)
     booking_type = models.CharField(max_length=20, choices=BookingType.choices, default=BookingType.GENERAL)
     tracking_code = models.CharField(max_length=16, unique=True, editable=False, blank=True, default="")
-    sample_reg_no = models.CharField(max_length=32, unique=True, editable=False, null=True, blank=True)
+    sample_reg_no = models.CharField(max_length=32, unique=True, null=True, blank=True)
+    manual_certificate_no = models.CharField(max_length=64, blank=True, null=True)
     sample_qty = models.CharField(max_length=100, blank=True)
     sample_location = models.CharField(max_length=255, blank=True)
     packaging_mode = models.CharField(max_length=255, blank=True)
@@ -178,9 +179,10 @@ class Booking(models.Model):
 
     @property
     def certificate_no(self) -> str:
-        # Certificate serials are assigned by Sample Receipt Date and reset
-        # for each receipt date, independently of registration numbers.
-        uses_receipt_date = bool(self.sample_receipt_date)
+        """Return the booking certificate number using the configured numbering mode."""
+        if self.manual_certificate_no:
+            return self.manual_certificate_no
+
         receipt_date = self.sample_receipt_date or self.booking_date
         if not receipt_date:
             return "-"
@@ -188,10 +190,29 @@ class Booking(models.Model):
         if timezone.is_aware(receipt_date):
             receipt_date = timezone.localtime(receipt_date)
 
+        numbering_mode = None
+        try:
+            from django.apps import apps
+
+            SystemSetting = apps.get_model("accounts", "SystemSetting")
+            numbering_mode = SystemSetting.current().certificate_numbering_mode
+        except Exception:
+            numbering_mode = None
+
+        if numbering_mode == "continuous":
+            if not self.pk:
+                sequence = 1
+            else:
+                sequence = Booking.objects.filter(
+                    booking_type=self.booking_type,
+                    pk__lte=self.pk,
+                ).count()
+            return f"ARL/{self.booking_type_code}/{receipt_date.strftime('%y%m%d')}{sequence:04d}"
+
         if not self.pk:
             sequence = 1
         else:
-            date_field = "sample_receipt_date" if uses_receipt_date else "booking_date"
+            date_field = "sample_receipt_date" if self.sample_receipt_date else "booking_date"
             sequence = Booking.objects.filter(
                 **{f"{date_field}__date": receipt_date.date()},
             ).filter(

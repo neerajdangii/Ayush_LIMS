@@ -127,8 +127,26 @@ class AnnouncementSeen(models.Model):
 class SystemSetting(models.Model):
     """Singleton-style settings that control login access and idle sessions."""
 
+    class CertificateNumberingMode(models.TextChoices):
+        CONTINUOUS = "continuous", "Continuous serial (0001... )"
+        DAILY = "daily", "Daily serial by receipt date (001... )"
+
     login_enabled = models.BooleanField(default=True)
     session_timeout_minutes = models.PositiveIntegerField(default=0, help_text="Use 0 to disable automatic logout.")
+    certificate_numbering_mode = models.CharField(
+        max_length=16,
+        choices=CertificateNumberingMode.choices,
+        default=CertificateNumberingMode.DAILY,
+        help_text="Select how booking certificate numbers are generated for reports.",
+    )
+    allow_manual_sample_reg_no = models.BooleanField(
+        default=False,
+        help_text="Allow manual editing of Sample Reg No. for bookings when editing.",
+    )
+    allow_manual_certificate_no = models.BooleanField(
+        default=False,
+        help_text="Allow manual editing of the certificate number for printed COA reports.",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

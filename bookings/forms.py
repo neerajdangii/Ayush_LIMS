@@ -71,6 +71,39 @@ class BookingForm(forms.ModelForm):
         "expiry_retest_date",
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        allow_manual = False
+        allow_manual_cert = False
+        try:
+            from accounts.models import SystemSetting
+
+            settings = SystemSetting.current()
+            allow_manual = settings.allow_manual_sample_reg_no
+            allow_manual_cert = settings.allow_manual_certificate_no
+        except Exception:
+            allow_manual = False
+
+        if 'sample_reg_no' in self.fields:
+            if not self.instance.pk or not allow_manual:
+                self.fields["sample_reg_no"].widget.attrs["readonly"] = True
+                self.fields["sample_reg_no"].widget.attrs["placeholder"] = (
+                    "Auto after save" if not self.instance.pk else self.instance.sample_registration_no or ""
+                )
+                self.fields["sample_reg_no"].required = False
+            else:
+                self.fields["sample_reg_no"].widget.attrs["title"] = "Edit the sample registration number manually"
+        
+        # Certificate number manual edit
+        if not self.instance.pk or not allow_manual_cert:
+            # do not expose manual certificate field when not allowed
+            if 'manual_certificate_no' in self.fields:
+                self.fields['manual_certificate_no'].widget.attrs['readonly'] = True
+                self.fields['manual_certificate_no'].required = False
+        else:
+            if 'manual_certificate_no' in self.fields:
+                self.fields['manual_certificate_no'].widget.attrs['title'] = 'Edit certificate number override'
+
     class Meta:
         model = Booking
         fields = [
@@ -91,6 +124,8 @@ class BookingForm(forms.ModelForm):
             "sample_location",
             "packaging_mode",
             "sample_condition",
+            # sample_reg_no is intentionally not editable via the booking form
+            "manual_certificate_no",
             "batch_no",
             "batch_size",
             "manufacture_date",
@@ -165,6 +200,8 @@ class BookingForm(forms.ModelForm):
             "sample_location": forms.TextInput(attrs={"class": "form-control"}),
             "packaging_mode": forms.TextInput(attrs={"class": "form-control"}),
             "sample_condition": forms.TextInput(attrs={"class": "form-control"}),
+            # sample_reg_no omitted to prevent manual editing via form
+                "manual_certificate_no": forms.TextInput(attrs={"class": "form-control"}),
             "batch_no": forms.TextInput(attrs={"class": "form-control"}),
             "batch_size": forms.TextInput(attrs={"class": "form-control"}),
             "manufacture_date": forms.DateInput(

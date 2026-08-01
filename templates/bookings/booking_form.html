@@ -82,8 +82,9 @@
             {{ form.booking_type }}
           </div>
           <div class="booking-col">
-            <label class="form-label">Sample Reg No.</label>
-            <input type="text" class="form-control" value="{{ form.instance.sample_registration_no|default:'Auto After Save' }}" readonly>
+            <label class="form-label">Certificate No. Override</label>
+            {{ form.manual_certificate_no }}
+            <div class="form-text text-muted">Optional: provide a certificate number that will appear on printed COA when system allows manual certificate editing.</div>
           </div>
         </div>
 

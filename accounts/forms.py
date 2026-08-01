@@ -77,10 +77,19 @@ class WelcomeAnnouncementForm(forms.ModelForm):
 class SystemSettingForm(forms.ModelForm):
     class Meta:
         model = SystemSetting
-        fields = ["login_enabled", "session_timeout_minutes"]
+        fields = [
+            "login_enabled",
+            "session_timeout_minutes",
+            "certificate_numbering_mode",
+            "allow_manual_sample_reg_no",
+            "allow_manual_certificate_no",
+        ]
         widgets = {
             "login_enabled": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "session_timeout_minutes": forms.NumberInput(attrs={"class": "form-control", "min": 0, "max": 10080}),
+            "certificate_numbering_mode": forms.Select(attrs={"class": "form-select"}),
+            "allow_manual_sample_reg_no": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "allow_manual_certificate_no": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
 
