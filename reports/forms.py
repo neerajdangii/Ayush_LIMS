@@ -264,6 +264,16 @@ class COAEditForm(forms.ModelForm):
             self.initial["ceo_content"] = default_content
             self.fields["ceo_content"].initial = default_content
 
+        self.fields["certificate_no"] = forms.CharField(
+            required=False,
+            widget=forms.TextInput(attrs={"class": "form-control"}),
+            label="Certificate No.",
+        )
+        if self.instance and self.instance.booking_id:
+            booking = self.instance.booking
+            self.initial["certificate_no"] = booking.manual_certificate_no or ""
+            self.fields["certificate_no"].widget.attrs["placeholder"] = booking.certificate_no
+
     def save(self, commit=True):
         # Save the Report instance first, then persist any certificate number override
         report = super().save(commit=commit)
@@ -277,18 +287,6 @@ class COAEditForm(forms.ModelForm):
             except Exception:
                 booking.save()
         return report
-
-        # Certificate number editable field (maps to booking.manual_certificate_no)
-        self.fields['certificate_no'] = forms.CharField(
-            required=False,
-            widget=forms.TextInput(attrs={'class': 'form-control'}),
-            label='Certificate No.',
-        )
-        if self.instance and getattr(self.instance, 'booking', None):
-            # Prefer showing the booking's manual override if set, otherwise computed certificate_no
-            booking = self.instance.booking
-            current = booking.manual_certificate_no if booking.manual_certificate_no else booking.certificate_no
-            self.initial['certificate_no'] = current
 
     def _selected_tests(self):
         if not self.instance or not getattr(self.instance, "booking", None):

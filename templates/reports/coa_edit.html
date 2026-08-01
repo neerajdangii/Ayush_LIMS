@@ -159,12 +159,8 @@
         </div>
         <div class="coa-meta-field">
           <label>Certificate No.</label>
-          {% if allow_manual_certificate_no %}
-            {{ form.certificate_no }}
-            <small class="text-muted">Editable certificate number override (saved to booking).</small>
-          {% else %}
-            <input type="text" class="form-control" value="{{ object.certificate_no }}" readonly>
-          {% endif %}
+          {{ form.certificate_no }}
+          <small class="text-muted">Optional. Leave blank to use the automatic certificate number.</small>
         </div>
       </div>
       <div class="coa-meta-row">

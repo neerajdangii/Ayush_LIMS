@@ -139,14 +139,6 @@ class SystemSetting(models.Model):
         default=CertificateNumberingMode.DAILY,
         help_text="Select how booking certificate numbers are generated for reports.",
     )
-    allow_manual_sample_reg_no = models.BooleanField(
-        default=False,
-        help_text="Allow manual editing of Sample Reg No. for bookings when editing.",
-    )
-    allow_manual_certificate_no = models.BooleanField(
-        default=False,
-        help_text="Allow manual editing of the certificate number for printed COA reports.",
-    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

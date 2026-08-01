@@ -1815,13 +1815,6 @@ class COAEditView(PermissionRequiredMixin, RoleRequiredMixin, UpdateView):
             }
             for report in previous_reports[:20]
         ]
-        # expose system setting for whether manual certificate editing is allowed
-        try:
-            from accounts.models import SystemSetting
-
-            context["allow_manual_certificate_no"] = SystemSetting.current().allow_manual_certificate_no
-        except Exception:
-            context["allow_manual_certificate_no"] = False
         return context
 
     def get_success_url(self):

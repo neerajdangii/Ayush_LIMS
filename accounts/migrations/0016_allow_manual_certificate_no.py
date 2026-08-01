@@ -1,4 +1,4 @@
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -7,13 +7,7 @@ class Migration(migrations.Migration):
         ("accounts", "0015_manual_certificate_no"),
     ]
 
-    operations = [
-        migrations.AddField(
-            model_name="systemsetting",
-            name="allow_manual_certificate_no",
-            field=models.BooleanField(
-                default=False,
-                help_text="Allow manual editing of the certificate number for printed COA reports.",
-            ),
-        ),
-    ]
+    # 0015 already introduced this field.  Keep this migration as a no-op so
+    # installations applying the migration sequence from scratch do not try to
+    # add the same database column twice.
+    operations = []

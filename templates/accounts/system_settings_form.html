@@ -5,9 +5,7 @@
   <form method="post" class="row g-3">{% csrf_token %}
     <div class="col-12"><div class="form-check">{{ form.login_enabled }} {{ form.login_enabled.label_tag }}</div><div class="form-text">When disabled, no new user can log in. Keep an administrator session open so this can be enabled again.</div></div>
     <div class="col-md-5">{{ form.session_timeout_minutes.label_tag }}{{ form.session_timeout_minutes }}<div class="form-text">Minutes of inactivity before logout. Enter 0 to disable.</div>{{ form.session_timeout_minutes.errors }}</div>
-    <div class="col-md-5">{{ form.certificate_numbering_mode.label_tag }}{{ form.certificate_numbering_mode }}<div class="form-text">Choose whether certificate numbers are generated as a continuous serial or reset daily by receipt date.</div>{{ form.certificate_numbering_mode.errors }}</div>
-    <div class="col-md-4 form-check mt-4">{{ form.allow_manual_sample_reg_no }} {{ form.allow_manual_sample_reg_no.label_tag }}<div class="form-text">When enabled, Sample Reg No can be edited manually on booking edit screens.</div>{{ form.allow_manual_sample_reg_no.errors }}</div>
-    <div class="col-md-4 form-check mt-4">{{ form.allow_manual_certificate_no }} {{ form.allow_manual_certificate_no.label_tag }}<div class="form-text">When enabled, Certificate No can be edited manually and will appear on printed COA.</div>{{ form.allow_manual_certificate_no.errors }}</div>
+    <div class="col-md-5">{{ form.certificate_numbering_mode.label_tag }}{{ form.certificate_numbering_mode }}<div class="form-text">Choose whether certificate numbers are generated as a continuous serial or reset daily by receipt date. Daily numbering starts at 001.</div>{{ form.certificate_numbering_mode.errors }}</div>
     <div class="col-12"><button class="btn btn-primary">Save Settings</button><a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Cancel</a></div>
   </form>
 </div></div>
