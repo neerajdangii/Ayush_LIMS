@@ -2005,9 +2005,8 @@ class ReportTemplateDeleteView(PermissionRequiredMixin, RoleRequiredMixin, Delet
         return reverse("reports:template_list")
 
 
-class COALetterheadUpdateView(PermissionRequiredMixin, RoleRequiredMixin, FormView):
-    permission_required = "reports.change_reporttemplate"
-    required_roles = ("Admin", "Manager")
+class COALetterheadUpdateView(PermissionRequiredMixin, FormView):
+    permission_required = "reports.manage_letterheads"
     form_class = COALetterheadForm
     template_name = "reports/coa_letterhead_form.html"
 

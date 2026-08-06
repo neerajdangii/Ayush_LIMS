@@ -38,7 +38,7 @@
           {% if user|has_any_role:"Admin,Manager,Analyst" %}
           <li class="nav-item"><a class="nav-link" href="{% url 'bookings:master_list' 'customer' %}">Masters</a></li>
           {% endif %}
-          {% if user.is_superuser %}
+          {% if user.is_superuser or perms.accounts.manage_users %}
           <li class="nav-item"><a class="nav-link" href="{% url 'accounts:user_list' %}">Users</a></li>
           {% endif %}
         </ul>

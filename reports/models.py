@@ -81,6 +81,9 @@ class COALetterhead(models.Model):
     class Meta:
         verbose_name = "COA Letterhead"
         verbose_name_plural = "COA Letterhead"
+        permissions = [
+            ("manage_letterheads", "Can upload and manage COA and Test letterheads"),
+        ]
 
     def __str__(self) -> str:
         return self.name

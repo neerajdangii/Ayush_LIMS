@@ -110,7 +110,12 @@ class AdminUserCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     success_url = reverse_lazy('accounts:user_list')
 
     def test_func(self):
-        return self.request.user.is_superuser
+        return self.request.user.is_superuser or self.request.user.has_perm("accounts.manage_users")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["grantor"] = self.request.user
+        return kwargs
 
     def handle_no_permission(self):
         messages.error(self.request, 'Only admin can create users.')
@@ -128,7 +133,7 @@ class AdminUserListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     paginate_by = 25
 
     def test_func(self):
-        return self.request.user.is_superuser
+        return self.request.user.is_superuser or self.request.user.has_perm("accounts.manage_users")
 
     def handle_no_permission(self):
         messages.error(self.request, "Only admin can manage users.")
@@ -137,6 +142,8 @@ class AdminUserListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     def get_queryset(self):
         UserModel = get_user_model()
         qs = UserModel.objects.all().order_by("username")
+        if not self.request.user.is_superuser:
+            qs = qs.filter(is_superuser=False)
         q = (self.request.GET.get("q") or "").strip()
         if q:
             qs = qs.filter(
@@ -193,14 +200,22 @@ class AdminUserUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     success_url = reverse_lazy("accounts:user_list")
 
     def test_func(self):
-        return self.request.user.is_superuser
+        return self.request.user.is_superuser or self.request.user.has_perm("accounts.manage_users")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["grantor"] = self.request.user
+        return kwargs
 
     def handle_no_permission(self):
         messages.error(self.request, "Only admin can manage users.")
         return super().handle_no_permission()
 
     def get_queryset(self):
-        return get_user_model().objects.all()
+        queryset = get_user_model().objects.all()
+        if not self.request.user.is_superuser:
+            queryset = queryset.filter(is_superuser=False)
+        return queryset
 
     def form_valid(self, form):
         response = super().form_valid(form)

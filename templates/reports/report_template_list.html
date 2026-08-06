@@ -7,7 +7,7 @@
     <div class="text-muted">Create and reuse result-section templates in COA edit.</div>
   </div>
   <div class="d-flex gap-2">
-    {% if perms.reports.change_reporttemplate %}
+    {% if perms.reports.manage_letterheads %}
     <a href="{% url 'reports:coa_letterhead' %}" class="btn btn-outline-primary">COA Letterhead</a>
     <a href="{% url 'reports:test_letterhead' %}" class="btn btn-outline-primary">Test Letterhead</a>
     {% endif %}

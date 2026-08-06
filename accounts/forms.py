@@ -44,6 +44,76 @@ def _billing_permissions():
     ))
 
 
+def _letterhead_permission():
+    return _permission("reports", "manage_letterheads")
+
+
+def _user_management_permission():
+    return _permission("accounts", "manage_users")
+
+
+DELEGATED_PERMISSION_FIELDS = {
+    "can_edit_masters": [("bookings", codename) for codename in MASTER_PERMISSION_CODENAMES],
+    "can_delete_bookings": [("bookings", "delete_booking")],
+    "can_view_data_sheet": [("bookings", "view_data_sheet")],
+    "can_view_user_activity": [("accounts", "view_user_activity")],
+    "can_manage_billing": [("bookings", "view_billingrecord")],
+    "can_manage_welcome_announcement": [("accounts", "manage_welcome_announcement")],
+    "can_manage_system_settings": [("accounts", "manage_system_settings")],
+    "can_edit_tinymce_source": [("accounts", "edit_tinymce_source")],
+    "can_manage_letterheads": [("reports", "manage_letterheads")],
+    "can_manage_users": [("accounts", "manage_users")],
+}
+
+
+def _restrict_delegated_access(form, grantor):
+    """Limit a delegated administrator to roles and permissions they possess."""
+    form.grantor = grantor
+    form.is_delegated_admin = bool(grantor and not grantor.is_superuser)
+    if not form.is_delegated_admin:
+        return
+
+    grantor_permissions = grantor.get_all_permissions()
+    allowed_permission_codenames = [key.split(".", 1)[1] for key in grantor_permissions if "." in key]
+    form.fields["permissions"].queryset = form.fields["permissions"].queryset.filter(
+        codename__in=allowed_permission_codenames
+    )
+    form.fields["groups"].queryset = grantor.groups.filter(
+        name__in=["Admin", "Manager", "Analyst"]
+    ).order_by("name")
+
+    for field_name, permission_keys in DELEGATED_PERMISSION_FIELDS.items():
+        if field_name == "can_edit_masters":
+            is_allowed = all(
+                f"{permission.content_type.app_label}.{permission.codename}" in grantor_permissions
+                for permission in _master_permissions_queryset()
+            )
+        else:
+            is_allowed = all(
+                f"{app_label}.{codename}" in grantor_permissions
+                for app_label, codename in permission_keys
+            )
+        if field_name in form.fields and not is_allowed:
+            form.fields[field_name].disabled = True
+
+    if "is_staff" in form.fields and not grantor.is_staff:
+        form.fields["is_staff"].disabled = True
+    if "is_checked_by" in form.fields and not grantor.groups.filter(name="Checked By").exists():
+        form.fields["is_checked_by"].disabled = True
+    if "is_person_incharge" in form.fields and not grantor.groups.filter(name="Incharge").exists():
+        form.fields["is_person_incharge"].disabled = True
+
+
+def _preserve_unguardable_permissions(form, user, selected_permissions):
+    """Do not let delegated administrators remove permissions outside their scope."""
+    if not getattr(form, "is_delegated_admin", False) or not form._editing_existing:
+        return selected_permissions
+    allowed_keys = form.grantor.get_all_permissions()
+    allowed_codenames = [key.split(".", 1)[1] for key in allowed_keys if "." in key]
+    preserved = user.user_permissions.exclude(codename__in=allowed_codenames)
+    return list(selected_permissions) + list(preserved)
+
+
 class WelcomeAnnouncementForm(forms.ModelForm):
     class Meta:
         model = WelcomeAnnouncement
@@ -112,6 +182,8 @@ class AdminUserCreateForm(UserCreationForm):
     can_manage_welcome_announcement = forms.BooleanField(required=False, label="Welcome Announcement")
     can_manage_system_settings = forms.BooleanField(required=False, label="System Settings")
     can_edit_tinymce_source = forms.BooleanField(required=False, label="TinyMCE Source Code")
+    can_manage_letterheads = forms.BooleanField(required=False, label="Letterhead Upload")
+    can_manage_users = forms.BooleanField(required=False, label="User Management")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -152,13 +224,18 @@ class AdminUserCreateForm(UserCreationForm):
             "can_manage_billing",
             "can_manage_welcome_announcement",
             "can_manage_system_settings", "can_edit_tinymce_source",
+            "can_manage_letterheads",
+            "can_manage_users",
             "signature_file",
             "groups",
             "permissions",
         )
 
     def __init__(self, *args, **kwargs):
+        grantor = kwargs.pop("grantor", None)
         super().__init__(*args, **kwargs)
+        self._editing_existing = False
+        _restrict_delegated_access(self, grantor)
         self.fields["username"].widget.attrs["class"] = "form-control"
         self.fields["password1"].widget.attrs["class"] = "form-control"
         self.fields["password2"].widget.attrs["class"] = "form-control"
@@ -173,6 +250,8 @@ class AdminUserCreateForm(UserCreationForm):
         self.fields["can_manage_welcome_announcement"].widget.attrs["class"] = "form-check-input"
         self.fields["can_manage_system_settings"].widget.attrs["class"] = "form-check-input"
         self.fields["can_edit_tinymce_source"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_letterheads"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_users"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -191,6 +270,8 @@ class AdminUserCreateForm(UserCreationForm):
         can_manage_welcome_announcement = bool(self.cleaned_data.get("can_manage_welcome_announcement"))
         can_manage_system_settings = bool(self.cleaned_data.get("can_manage_system_settings"))
         can_edit_tinymce_source = bool(self.cleaned_data.get("can_edit_tinymce_source"))
+        can_manage_letterheads = bool(self.cleaned_data.get("can_manage_letterheads"))
+        can_manage_users = bool(self.cleaned_data.get("can_manage_users"))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
         if commit:
             user.save()
@@ -224,6 +305,15 @@ class AdminUserCreateForm(UserCreationForm):
                 permission = _permission("accounts", "edit_tinymce_source")
                 if permission:
                     selected_permissions.append(permission)
+            if can_manage_letterheads:
+                permission = _letterhead_permission()
+                if permission:
+                    selected_permissions.append(permission)
+            if can_manage_users:
+                permission = _user_management_permission()
+                if permission:
+                    selected_permissions.append(permission)
+            selected_permissions = _preserve_unguardable_permissions(self, user, selected_permissions)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
             if user.is_staff:
@@ -258,6 +348,8 @@ class AdminUserUpdateForm(forms.ModelForm):
     can_manage_welcome_announcement = forms.BooleanField(required=False, label="Welcome Announcement")
     can_manage_system_settings = forms.BooleanField(required=False, label="System Settings")
     can_edit_tinymce_source = forms.BooleanField(required=False, label="TinyMCE Source Code")
+    can_manage_letterheads = forms.BooleanField(required=False, label="Letterhead Upload")
+    can_manage_users = forms.BooleanField(required=False, label="User Management")
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -297,13 +389,18 @@ class AdminUserUpdateForm(forms.ModelForm):
             "can_manage_billing",
             "can_manage_welcome_announcement",
             "can_manage_system_settings", "can_edit_tinymce_source",
+            "can_manage_letterheads",
+            "can_manage_users",
             "signature_file",
             "groups",
             "permissions",
         )
 
     def __init__(self, *args, **kwargs):
+        grantor = kwargs.pop("grantor", None)
         super().__init__(*args, **kwargs)
+        self._editing_existing = bool(self.instance and self.instance.pk)
+        _restrict_delegated_access(self, grantor)
 
         self.fields["username"].widget.attrs["class"] = "form-control"
         self.fields["first_name"].widget.attrs["class"] = "form-control"
@@ -320,6 +417,8 @@ class AdminUserUpdateForm(forms.ModelForm):
         self.fields["can_manage_welcome_announcement"].widget.attrs["class"] = "form-check-input"
         self.fields["can_manage_system_settings"].widget.attrs["class"] = "form-check-input"
         self.fields["can_edit_tinymce_source"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_letterheads"].widget.attrs["class"] = "form-check-input"
+        self.fields["can_manage_users"].widget.attrs["class"] = "form-check-input"
         self.fields["signature_file"].widget.attrs["class"] = "form-control"
         self.fields["permissions"].widget.attrs["class"] = "form-check-input"
 
@@ -354,6 +453,12 @@ class AdminUserUpdateForm(forms.ModelForm):
             self.fields["can_edit_tinymce_source"].initial = self.instance.user_permissions.filter(
                 content_type__app_label="accounts", codename="edit_tinymce_source"
             ).exists()
+            self.fields["can_manage_letterheads"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="reports", codename="manage_letterheads"
+            ).exists()
+            self.fields["can_manage_users"].initial = self.instance.user_permissions.filter(
+                content_type__app_label="accounts", codename="manage_users"
+            ).exists()
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -371,6 +476,8 @@ class AdminUserUpdateForm(forms.ModelForm):
         can_manage_welcome_announcement = bool(self.cleaned_data.get("can_manage_welcome_announcement"))
         can_manage_system_settings = bool(self.cleaned_data.get("can_manage_system_settings"))
         can_edit_tinymce_source = bool(self.cleaned_data.get("can_edit_tinymce_source"))
+        can_manage_letterheads = bool(self.cleaned_data.get("can_manage_letterheads"))
+        can_manage_users = bool(self.cleaned_data.get("can_manage_users"))
         user.is_active = bool(self.cleaned_data.get("is_active", True))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
 
@@ -379,7 +486,17 @@ class AdminUserUpdateForm(forms.ModelForm):
 
             managed_group_names = {"Admin", "Manager", "Analyst", "Checked By", "Incharge", "Staff"}
             existing_groups = list(user.groups.all())
-            preserved_groups = [g for g in existing_groups if g.name not in managed_group_names]
+            if self.is_delegated_admin:
+                manageable_group_names = set(self.fields["groups"].queryset.values_list("name", flat=True))
+                if not self.fields["is_staff"].disabled:
+                    manageable_group_names.add("Staff")
+                if not self.fields["is_checked_by"].disabled:
+                    manageable_group_names.add("Checked By")
+                if not self.fields["is_person_incharge"].disabled:
+                    manageable_group_names.add("Incharge")
+                preserved_groups = [g for g in existing_groups if g.name not in manageable_group_names]
+            else:
+                preserved_groups = [g for g in existing_groups if g.name not in managed_group_names]
 
             selected_groups = list(self.cleaned_data.get("groups") or [])
             desired_groups = preserved_groups + selected_groups
@@ -432,6 +549,15 @@ class AdminUserUpdateForm(forms.ModelForm):
                 permission = _permission("accounts", "edit_tinymce_source")
                 if permission:
                     selected_permissions.append(permission)
+            if can_manage_letterheads:
+                permission = _letterhead_permission()
+                if permission:
+                    selected_permissions.append(permission)
+            if can_manage_users:
+                permission = _user_management_permission()
+                if permission:
+                    selected_permissions.append(permission)
+            selected_permissions = _preserve_unguardable_permissions(self, user, selected_permissions)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
 

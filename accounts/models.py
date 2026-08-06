@@ -145,6 +145,7 @@ class SystemSetting(models.Model):
         permissions = [
             ("manage_system_settings", "Can manage system settings"),
             ("edit_tinymce_source", "Can edit TinyMCE source code"),
+            ("manage_users", "Can create and manage limited users"),
         ]
 
     @classmethod
