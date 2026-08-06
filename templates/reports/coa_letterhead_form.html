@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
-{% block title %}COA Letterhead | LIMS{% endblock %}
+{% block title %}{{ letterhead_title|default:"COA Letterhead" }} | LIMS{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h3 class="mb-1">COA Letterhead</h3>
+    <h3 class="mb-1">{{ letterhead_title|default:"COA Letterhead" }}</h3>
     <div class="text-muted">Upload a full letterhead, or replace only the header, middle watermark, and footer.</div>
   </div>
-  <a href="{% url 'reports:template_list' %}" class="btn btn-outline-secondary">Back to Templates</a>
+  <a href="{{ back_url|default:'/reports/templates/' }}" class="btn btn-outline-secondary">Back to Templates</a>
 </div>
 
 <form method="post" enctype="multipart/form-data" class="card shadow-sm">
@@ -20,13 +20,30 @@
       <div class="col-md-6">
         <label class="form-label" for="{{ form.layout_mode.id_for_label }}">{{ form.layout_mode.label }}</label>
         {{ form.layout_mode }}
-        <div class="form-text">Default keeps the current COA letterhead. Full uses one complete page image. Header / Middle / Footer replaces only the uploaded parts.</div>
+        <div class="form-text">Default keeps the current letterhead. Full uses one complete page image. Header / Middle / Footer replaces only the uploaded parts.</div>
         {{ form.layout_mode.errors }}
       </div>
       <div class="col-md-6 d-flex align-items-end">
         <div class="form-check mb-2">
           {{ form.is_active }}
           <label class="form-check-label" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+        </div>
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="{{ form.report_title.id_for_label }}">{{ form.report_title.label }}</label>
+        {{ form.report_title }}
+        <div class="form-text">Leave blank to use the normal report title.</div>
+        {{ form.report_title.errors }}
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <div class="form-check mb-2">
+          {{ form.show_report_title }}
+          <label class="form-check-label" for="{{ form.show_report_title.id_for_label }}">{{ form.show_report_title.label }}</label>
         </div>
       </div>
     </div>
@@ -61,7 +78,7 @@
     </div>
   </div>
   <div class="card-footer bg-white d-flex justify-content-end gap-2">
-    <a href="{% url 'reports:template_list' %}" class="btn btn-outline-secondary">Cancel</a>
+    <a href="{{ back_url|default:'/reports/templates/' }}" class="btn btn-outline-secondary">Cancel</a>
     <button type="submit" class="btn btn-primary">Save Letterhead</button>
   </div>
 </form>

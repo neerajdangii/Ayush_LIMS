@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
+from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate, TestLetterhead
 
 
 @admin.register(ReportRemark)
@@ -26,6 +26,12 @@ class ReportTemplateAdmin(admin.ModelAdmin):
 
 @admin.register(COALetterhead)
 class COALetterheadAdmin(admin.ModelAdmin):
+    list_display = ("name", "layout_mode", "is_active", "updated_at")
+    readonly_fields = ("updated_at",)
+
+
+@admin.register(TestLetterhead)
+class TestLetterheadAdmin(admin.ModelAdmin):
     list_display = ("name", "layout_mode", "is_active", "updated_at")
     readonly_fields = ("updated_at",)
 

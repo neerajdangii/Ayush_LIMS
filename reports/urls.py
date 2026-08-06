@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     COAEditView,
     COALetterheadUpdateView,
+    TestLetterheadUpdateView,
     COAOptionView,
     COAPlainDocumentView,
     COAPrintView,
@@ -33,6 +34,7 @@ urlpatterns = [
     path("templates/", ReportTemplateListView.as_view(), name="template_list"),
     path("templates/add/", ReportTemplateCreateView.as_view(), name="template_add"),
     path("templates/coa-letterhead/", COALetterheadUpdateView.as_view(), name="coa_letterhead"),
+    path("templates/test-letterhead/", TestLetterheadUpdateView.as_view(), name="test_letterhead"),
     path("templates/<int:pk>/content/", ReportTemplateContentView.as_view(), name="template_content"),
     path("templates/<int:pk>/edit/", ReportTemplateUpdateView.as_view(), name="template_edit"),
     path("templates/<int:pk>/delete/", ReportTemplateDeleteView.as_view(), name="template_delete"),

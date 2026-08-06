@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
+from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate, TestLetterhead
 from .template_library import build_generic_result_table, populate_main_table_rows
 
 DATE_FORMAT_DMY = "%d/%m/%Y"
@@ -477,7 +477,16 @@ class COALetterheadForm(forms.ModelForm):
 
     class Meta:
         model = COALetterhead
-        fields = ["layout_mode", "full_image", "header_image", "middle_image", "footer_image", "is_active"]
+        fields = [
+            "layout_mode",
+            "full_image",
+            "header_image",
+            "middle_image",
+            "footer_image",
+            "is_active",
+            "show_report_title",
+            "report_title",
+        ]
         widgets = {
             "layout_mode": forms.Select(attrs={"class": "form-select"}),
             "full_image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
@@ -485,6 +494,8 @@ class COALetterheadForm(forms.ModelForm):
             "middle_image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
             "footer_image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "show_report_title": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "report_title": forms.TextInput(attrs={"class": "form-control"}),
         }
         labels = {
             "layout_mode": "Letterhead Option",
@@ -493,6 +504,8 @@ class COALetterheadForm(forms.ModelForm):
             "middle_image": "Middle Watermark / Body Image",
             "footer_image": "Footer Image",
             "is_active": "Use uploaded letterhead",
+            "show_report_title": "Show report title",
+            "report_title": "Report title",
         }
 
     def clean(self):
@@ -510,6 +523,15 @@ class COALetterheadForm(forms.ModelForm):
                 return None
             return value or getattr(self.instance, field_name, None)
 
+        # A newly uploaded image should take effect immediately.  This prevents
+        # an upload from being hidden when the option remains at its default.
+        if mode == COALetterhead.LayoutMode.DEFAULT:
+            if cleaned_data.get("full_image"):
+                mode = COALetterhead.LayoutMode.FULL
+            elif any(cleaned_data.get(field) for field in ("header_image", "middle_image", "footer_image")):
+                mode = COALetterhead.LayoutMode.PARTS
+            cleaned_data["layout_mode"] = mode
+
         if mode == COALetterhead.LayoutMode.FULL:
             full_image = current_file("full_image")
             if not full_image:
@@ -522,6 +544,11 @@ class COALetterheadForm(forms.ModelForm):
             if not has_part:
                 raise forms.ValidationError("Upload at least one header, middle, or footer image, or choose the default option.")
         return cleaned_data
+
+
+class TestLetterheadForm(COALetterheadForm):
+    class Meta(COALetterheadForm.Meta):
+        model = TestLetterhead
 
 
 class TDSDocumentTemplateForm(forms.ModelForm):

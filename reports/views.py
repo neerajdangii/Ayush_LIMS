@@ -27,8 +27,8 @@ from accounts.models import SystemSetting
 from bookings.models import Booking
 from bookings.permissions import RoleRequiredMixin, has_role
 
-from .forms import COAEditForm, COALetterheadForm, ReportApprovalForm, ReportTemplateForm, TDSDocumentTemplateForm, _extract_uploaded_printable_content
-from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate
+from .forms import COAEditForm, COALetterheadForm, ReportApprovalForm, ReportTemplateForm, TDSDocumentTemplateForm, TestLetterheadForm, _extract_uploaded_printable_content
+from .models import COALetterhead, Report, ReportRemark, ReportTemplate, TDSDocumentTemplate, TestLetterhead
 
 
 PUBLIC_REPORT_ALLOWED_STATUSES = {
@@ -102,7 +102,17 @@ def _get_report_render_context(report, request, *, preview_mode, auto_print, is_
     context["coa_public_url"] = request.build_absolute_uri(page_base)
     context["qr_payload"] = request.build_absolute_uri(base)
     context["report_ceo_content"] = mark_safe(report.ceo_content or "")
-    context["coa_letterhead"] = COALetterhead.get_active()
+    letterhead_model = TestLetterhead if is_test_report else COALetterhead
+    # The title controls are independent from the background letterhead.  This
+    # lets a user rename or hide the title even when using a plain report.
+    letterhead_settings = letterhead_model.objects.filter(pk=1).first()
+    letterhead = letterhead_model.get_active()
+    context["coa_letterhead"] = letterhead
+    if letterhead_settings:
+        if not letterhead_settings.show_report_title:
+            context["document_title"] = ""
+        elif letterhead_settings.report_title.strip():
+            context["document_title"] = letterhead_settings.report_title.strip()
     context.update(_build_report_date_context(report))
     return context
 
@@ -2017,6 +2027,28 @@ class COALetterheadUpdateView(PermissionRequiredMixin, RoleRequiredMixin, FormVi
 
     def get_success_url(self):
         return reverse("reports:coa_letterhead")
+
+
+class TestLetterheadUpdateView(COALetterheadUpdateView):
+    form_class = TestLetterheadForm
+
+    def get_object(self):
+        obj, _ = TestLetterhead.objects.get_or_create(pk=1, defaults={"name": "Test Letterhead"})
+        return obj
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, "Test letterhead settings updated.")
+        return FormView.form_valid(self, form)
+
+    def get_success_url(self):
+        return reverse("reports:test_letterhead")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["letterhead_title"] = "Test Letterhead"
+        context["back_url"] = reverse("reports:template_list")
+        return context
 
 
 class ReportTemplateContentView(PermissionRequiredMixin, RoleRequiredMixin, DetailView):

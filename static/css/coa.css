@@ -239,10 +239,7 @@ body.coa-rendered-ok #coa-page-first {
 }
 
 .coa-report-sheet .coa-body {
-  background-image: url("/static/img/arlpl_wm.png");
-  background-repeat: no-repeat;
-  background-position: center 15%;  
-  background-size: 120% 85%;           
+  background-image: none;
 }
 
 .coa-letterhead-custom--full .coa-body,

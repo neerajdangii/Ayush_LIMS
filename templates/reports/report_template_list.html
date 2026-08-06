@@ -9,6 +9,7 @@
   <div class="d-flex gap-2">
     {% if perms.reports.change_reporttemplate %}
     <a href="{% url 'reports:coa_letterhead' %}" class="btn btn-outline-primary">COA Letterhead</a>
+    <a href="{% url 'reports:test_letterhead' %}" class="btn btn-outline-primary">Test Letterhead</a>
     {% endif %}
     {% if perms.reports.add_reporttemplate %}
     <a href="{% url 'reports:template_add' %}" class="btn btn-primary">Add Template</a>

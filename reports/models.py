@@ -74,11 +74,63 @@ class COALetterhead(models.Model):
     middle_image = models.FileField(upload_to="coa_letterheads/", null=True, blank=True)
     footer_image = models.FileField(upload_to="coa_letterheads/", null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    show_report_title = models.BooleanField(default=True)
+    report_title = models.CharField(max_length=255, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "COA Letterhead"
         verbose_name_plural = "COA Letterhead"
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_active(cls):
+        letterhead = cls.objects.filter(pk=1, is_active=True).first()
+        if not letterhead or letterhead.layout_mode == cls.LayoutMode.DEFAULT:
+            return None
+        if letterhead.layout_mode == cls.LayoutMode.FULL and not letterhead.has_full_image:
+            return None
+        if letterhead.layout_mode == cls.LayoutMode.PARTS and not letterhead.has_part_images:
+            return None
+        return letterhead
+
+    @property
+    def has_full_image(self):
+        return bool(self.full_image)
+
+    @property
+    def has_part_images(self):
+        return bool(self.header_image or self.middle_image or self.footer_image)
+
+
+class TestLetterhead(models.Model):
+    """Singleton letterhead used only for Test Report documents."""
+
+    class LayoutMode(models.TextChoices):
+        DEFAULT = "default", "Use current default"
+        FULL = "full", "Full page image"
+        PARTS = "parts", "Header / Middle / Footer"
+
+    name = models.CharField(max_length=120, default="Test Letterhead")
+    layout_mode = models.CharField(max_length=20, choices=LayoutMode.choices, default=LayoutMode.DEFAULT)
+    full_image = models.FileField(upload_to="test_letterheads/", null=True, blank=True)
+    header_image = models.FileField(upload_to="test_letterheads/", null=True, blank=True)
+    middle_image = models.FileField(upload_to="test_letterheads/", null=True, blank=True)
+    footer_image = models.FileField(upload_to="test_letterheads/", null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    show_report_title = models.BooleanField(default=True)
+    report_title = models.CharField(max_length=255, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Test Letterhead"
+        verbose_name_plural = "Test Letterhead"
 
     def __str__(self) -> str:
         return self.name

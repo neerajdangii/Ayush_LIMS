@@ -1,7 +1,7 @@
 {% load report_extras %}
 <div class="coa-page-header{% if is_continuation %} coa-continuation-header{% endif %}">
   <div class="coa-doc-head">
-    {% if not is_plain_doc %}
+    {% if not is_plain_doc and document_title %}
     <div class="coa-doc-head__title">{{ document_title }}</div>
     {% endif %}
     <div class="coa-meta-bar">
