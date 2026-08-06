@@ -526,6 +526,7 @@ class AdminUserUpdateForm(forms.ModelForm):
         can_edit_tinymce_source = bool(self.cleaned_data.get("can_edit_tinymce_source"))
         can_manage_letterheads = bool(self.cleaned_data.get("can_manage_letterheads"))
         can_manage_users = bool(self.cleaned_data.get("can_manage_users"))
+        can_assign_bookings = bool(self.cleaned_data.get("can_assign_bookings"))
         user.is_active = bool(self.cleaned_data.get("is_active", True))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
 
@@ -604,6 +605,10 @@ class AdminUserUpdateForm(forms.ModelForm):
                 permission = _user_management_permission()
                 if permission:
                     selected_permissions.append(permission)
+            if can_assign_bookings:
+                assign_perm = _permission("bookings", "assign_booking")
+                if assign_perm:
+                    selected_permissions.append(assign_perm)
             selected_permissions = _preserve_unguardable_permissions(self, user, selected_permissions)
             unique_permissions = {permission.pk: permission for permission in selected_permissions}
             user.user_permissions.set(unique_permissions.values())
