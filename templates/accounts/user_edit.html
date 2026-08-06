@@ -142,6 +142,13 @@
       </div>
       {% endif %}
 
+      {% if not form.can_assign_bookings.field.disabled %}
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_assign_bookings }}
+        <label class="form-check-label" for="id_can_assign_bookings">Assign Bookings</label>
+      </div>
+      {% endif %}
+
       <div class="col-md-12">
         <label class="form-label" for="id_signature_file">Signature file</label>
         {{ form.signature_file }}
