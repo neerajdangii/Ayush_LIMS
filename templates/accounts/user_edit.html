@@ -47,21 +47,28 @@
         <label class="form-check-label" for="id_is_active">Active</label>
       </div>
 
+      {% if not form.is_staff.field.disabled %}
       <div class="col-md-3 form-check mt-4 ms-3">
         {{ form.is_staff }}
         <label class="form-check-label" for="id_is_staff">Staff user</label>
       </div>
+      {% endif %}
 
+      {% if not form.is_checked_by.field.disabled %}
       <div class="col-md-3 form-check mt-4 ms-3">
         {{ form.is_checked_by }}
         <label class="form-check-label" for="id_is_checked_by">Checked By</label>
       </div>
+      {% endif %}
 
+      {% if not form.is_person_incharge.field.disabled %}
       <div class="col-md-3 form-check mt-4 ms-3">
         {{ form.is_person_incharge }}
         <label class="form-check-label" for="id_is_person_incharge">Person In-charge</label>
       </div>
+      {% endif %}
 
+      {% if not form.master_access.field.disabled %}
       <div class="col-md-12 mt-3">
         <label class="form-label">{{ form.master_access.label }}</label>
         <div class="row g-3">
@@ -75,34 +82,65 @@
         <div class="form-text">Choose only the individual masters this user may add, edit, delete, and view.</div>
         {{ form.master_access.errors }}
       </div>
+      {% endif %}
 
+      {% if not form.can_delete_bookings.field.disabled %}
       <div class="col-md-3 form-check mt-4 ms-3">
         {{ form.can_delete_bookings }}
         <label class="form-check-label" for="id_can_delete_bookings">Delete Booking Access</label>
       </div>
+      {% endif %}
 
+      {% if not form.can_view_data_sheet.field.disabled %}
       <div class="col-md-3 form-check mt-4 ms-3">
         {{ form.can_view_data_sheet }}
         <label class="form-check-label" for="id_can_view_data_sheet">Data Sheet Access</label>
       </div>
+      {% endif %}
 
+      {% if not form.can_view_user_activity.field.disabled %}
       <div class="col-md-3 form-check mt-4 ms-3">
         {{ form.can_view_user_activity }}
         <label class="form-check-label" for="id_can_view_user_activity">User Activity Access</label>
       </div>
+      {% endif %}
 
+      {% if not form.can_manage_billing.field.disabled %}
       <div class="col-md-3 form-check mt-4 ms-3">
         {{ form.can_manage_billing }}
         <label class="form-check-label" for="id_can_manage_billing">Bill Invoice</label>
       </div>
+      {% endif %}
+      {% if not form.can_manage_welcome_announcement.field.disabled %}
       <div class="col-md-3 form-check mt-4 ms-3">
         {{ form.can_manage_welcome_announcement }}
         <label class="form-check-label" for="id_can_manage_welcome_announcement">Welcome Announcement</label>
       </div>
-      <div class="col-md-3 form-check mt-4 ms-3">{{ form.can_manage_system_settings }}<label class="form-check-label" for="id_can_manage_system_settings">System Settings</label></div>
-      <div class="col-md-3 form-check mt-4 ms-3">{{ form.can_edit_tinymce_source }}<label class="form-check-label" for="id_can_edit_tinymce_source">TinyMCE Source Code</label></div>
-      <div class="col-md-3 form-check mt-4 ms-3">{{ form.can_manage_letterheads }}<label class="form-check-label" for="id_can_manage_letterheads">Letterhead Upload</label></div>
-      <div class="col-md-3 form-check mt-4 ms-3">{{ form.can_manage_users }}<label class="form-check-label" for="id_can_manage_users">User Management</label></div>
+      {% endif %}
+      {% if not form.can_manage_system_settings.field.disabled %}
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_manage_system_settings }}
+        <label class="form-check-label" for="id_can_manage_system_settings">System Settings</label>
+      </div>
+      {% endif %}
+      {% if not form.can_edit_tinymce_source.field.disabled %}
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_edit_tinymce_source }}
+        <label class="form-check-label" for="id_can_edit_tinymce_source">TinyMCE Source Code</label>
+      </div>
+      {% endif %}
+      {% if not form.can_manage_letterheads.field.disabled %}
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_manage_letterheads }}
+        <label class="form-check-label" for="id_can_manage_letterheads">Letterhead Upload</label>
+      </div>
+      {% endif %}
+      {% if not form.can_manage_users.field.disabled %}
+      <div class="col-md-3 form-check mt-4 ms-3">
+        {{ form.can_manage_users }}
+        <label class="form-check-label" for="id_can_manage_users">User Management</label>
+      </div>
+      {% endif %}
 
       <div class="col-md-12">
         <label class="form-label" for="id_signature_file">Signature file</label>

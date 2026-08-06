@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth import get_user_model
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.core.files.storage import default_storage
@@ -216,6 +216,12 @@ class AdminUserUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         if not self.request.user.is_superuser:
             queryset = queryset.filter(is_superuser=False)
         return queryset
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset=queryset)
+        if obj.is_superuser and not self.request.user.is_superuser:
+            raise Http404("Not found")
+        return obj
 
     def form_valid(self, form):
         response = super().form_valid(form)
