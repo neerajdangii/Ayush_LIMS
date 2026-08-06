@@ -143,7 +143,7 @@ class AdminUserListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
         UserModel = get_user_model()
         qs = UserModel.objects.all().order_by("username")
         if not self.request.user.is_superuser:
-            qs = qs.filter(is_superuser=False)
+            qs = qs.filter(is_superuser=False).exclude(groups__name="Admin")
         q = (self.request.GET.get("q") or "").strip()
         if q:
             qs = qs.filter(
@@ -214,12 +214,12 @@ class AdminUserUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def get_queryset(self):
         queryset = get_user_model().objects.all()
         if not self.request.user.is_superuser:
-            queryset = queryset.filter(is_superuser=False)
+            queryset = queryset.filter(is_superuser=False).exclude(groups__name="Admin")
         return queryset
 
     def get_object(self, queryset=None):
         obj = super().get_object(queryset=queryset)
-        if obj.is_superuser and not self.request.user.is_superuser:
+        if (obj.is_superuser or obj.groups.filter(name="Admin").exists()) and not self.request.user.is_superuser:
             raise Http404("Not found")
         return obj
 
