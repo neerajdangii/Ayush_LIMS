@@ -171,6 +171,7 @@ class Booking(models.Model):
         ordering = ["-created_at"]
         permissions = [
             ("view_data_sheet", "Can view Data Sheet"),
+            ("assign_booking", "Can assign bookings"),
         ]
 
     @property

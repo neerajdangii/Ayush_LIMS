@@ -110,7 +110,10 @@ class AdminUserCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     success_url = reverse_lazy('accounts:user_list')
 
     def test_func(self):
-        return self.request.user.is_superuser or self.request.user.has_perm("accounts.manage_users")
+        # Allow only superusers and Admin/Manager group members to manage users.
+        if self.request.user.is_superuser:
+            return True
+        return self.request.user.groups.filter(name__in=("Admin", "Manager")).exists()
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -234,7 +237,10 @@ class AdminUserDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
     success_url = reverse_lazy("accounts:user_list")
 
     def test_func(self):
-        return self.request.user.is_superuser
+        # Allow superusers and Admin/Manager group members to delete users
+        if self.request.user.is_superuser:
+            return True
+        return self.request.user.groups.filter(name__in=("Admin", "Manager")).exists()
 
     def handle_no_permission(self):
         messages.error(self.request, "Only admin can manage users.")
@@ -250,6 +256,10 @@ class AdminUserDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
             return redirect("accounts:user_list")
         if getattr(user_obj, "is_superuser", False):
             messages.error(request, "You cannot delete a superuser account.")
+            return redirect("accounts:user_list")
+        # Do not allow deletion of Admin-group members by non-superusers
+        if user_obj.groups.filter(name="Admin").exists() and not request.user.is_superuser:
+            messages.error(request, "You cannot delete an Admin group account.")
             return redirect("accounts:user_list")
         return super().dispatch(request, *args, **kwargs)
 

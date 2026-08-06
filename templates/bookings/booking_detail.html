@@ -86,7 +86,7 @@
                 {% endif %}
               {% endif %}
             {% else %}
-              {% if user|has_role:"Checked By" %}
+              {% if user|has_role:"Checked By" and perms.bookings.assign_booking %}
               <form method="post" action="{% url 'bookings:approve' booking.pk %}" class="d-inline" id="bookingAssignForm">
                 {% csrf_token %}
                 <button class="btn btn-sm btn-success" type="submit">Assign</button>
