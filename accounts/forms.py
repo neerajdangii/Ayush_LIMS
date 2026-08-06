@@ -5,22 +5,36 @@ from django.contrib.auth.models import Group, Permission, User
 from .models import SystemSetting, UserProfile, WelcomeAnnouncement
 
 
-MASTER_PERMISSION_CODENAMES = [
-    "add_customermaster", "change_customermaster", "delete_customermaster", "view_customermaster",
-    "add_submittermaster", "change_submittermaster", "delete_submittermaster", "view_submittermaster",
-    "add_manufacturermaster", "change_manufacturermaster", "delete_manufacturermaster", "view_manufacturermaster",
-    "add_samplenamemaster", "change_samplenamemaster", "delete_samplenamemaster", "view_samplenamemaster",
-    "add_testmaster", "change_testmaster", "delete_testmaster", "view_testmaster",
-    "add_protocolmaster", "change_protocolmaster", "delete_protocolmaster", "view_protocolmaster",
-    "add_uommaster", "change_uommaster", "delete_uommaster", "view_uommaster",
-    "add_reportremark", "change_reportremark", "delete_reportremark", "view_reportremark",
+MASTER_ACCESS_OPTIONS = [
+    ("customer", "Customer Master", ["add_customermaster", "change_customermaster", "delete_customermaster", "view_customermaster"]),
+    ("submitter", "Submitter Master", ["add_submittermaster", "change_submittermaster", "delete_submittermaster", "view_submittermaster"]),
+    ("manufacturer", "Manufacturer Master", ["add_manufacturermaster", "change_manufacturermaster", "delete_manufacturermaster", "view_manufacturermaster"]),
+    ("sample_name", "Sample Name Master", ["add_samplenamemaster", "change_samplenamemaster", "delete_samplenamemaster", "view_samplenamemaster"]),
+    ("test", "Test Master", ["add_testmaster", "change_testmaster", "delete_testmaster", "view_testmaster"]),
+    ("protocol", "Protocol Master", ["add_protocolmaster", "change_protocolmaster", "delete_protocolmaster", "view_protocolmaster"]),
+    ("uom", "UOM Master", ["add_uommaster", "change_uommaster", "delete_uommaster", "view_uommaster"]),
+    ("remark", "Remark Master", ["add_reportremark", "change_reportremark", "delete_reportremark", "view_reportremark"]),
+    ("tds", "TDS Master", ["add_tdsdocumenttemplate", "change_tdsdocumenttemplate", "delete_tdsdocumenttemplate", "view_tdsdocumenttemplate"]),
 ]
 
 
-def _master_permissions_queryset():
-    return Permission.objects.filter(codename__in=MASTER_PERMISSION_CODENAMES).order_by(
-        "content_type__app_label", "codename"
-    )
+def _master_permissions_for_keys(keys):
+    permission_codenames = {
+        codename
+        for key, _label, codenames in MASTER_ACCESS_OPTIONS
+        if key in set(keys or [])
+        for codename in codenames
+    }
+    return list(Permission.objects.filter(codename__in=permission_codenames))
+
+
+def _selected_master_access_keys(user):
+    user_permission_codenames = set(user.user_permissions.values_list("codename", flat=True))
+    return [
+        key
+        for key, _label, codenames in MASTER_ACCESS_OPTIONS
+        if set(codenames).issubset(user_permission_codenames)
+    ]
 
 
 def _delete_booking_permission():
@@ -53,7 +67,6 @@ def _user_management_permission():
 
 
 DELEGATED_PERMISSION_FIELDS = {
-    "can_edit_masters": [("bookings", codename) for codename in MASTER_PERMISSION_CODENAMES],
     "can_delete_bookings": [("bookings", "delete_booking")],
     "can_view_data_sheet": [("bookings", "view_data_sheet")],
     "can_view_user_activity": [("accounts", "view_user_activity")],
@@ -81,15 +94,17 @@ def _restrict_delegated_access(form, grantor):
     form.fields["groups"].queryset = grantor.groups.filter(
         name__in=["Admin", "Manager", "Analyst"]
     ).order_by("name")
+    form.fields["master_access"].choices = [
+        (key, label)
+        for key, label, _codenames in MASTER_ACCESS_OPTIONS
+        if all(
+            f"{permission.content_type.app_label}.{permission.codename}" in grantor_permissions
+            for permission in _master_permissions_for_keys([key])
+        )
+    ]
 
     for field_name, permission_keys in DELEGATED_PERMISSION_FIELDS.items():
-        if field_name == "can_edit_masters":
-            is_allowed = all(
-                f"{permission.content_type.app_label}.{permission.codename}" in grantor_permissions
-                for permission in _master_permissions_queryset()
-            )
-        else:
-            is_allowed = all(
+        is_allowed = all(
                 f"{app_label}.{codename}" in grantor_permissions
                 for app_label, codename in permission_keys
             )
@@ -174,7 +189,6 @@ class AdminUserCreateForm(UserCreationForm):
     is_staff = forms.BooleanField(required=False)
     is_checked_by = forms.BooleanField(required=False, label="Checked By")
     is_person_incharge = forms.BooleanField(required=False, label="Person In-charge")
-    can_edit_masters = forms.BooleanField(required=False, label="Edit Masters")
     can_delete_bookings = forms.BooleanField(required=False, label="Delete Booking Access")
     can_view_data_sheet = forms.BooleanField(required=False, label="Data Sheet Access")
     can_view_user_activity = forms.BooleanField(required=False, label="User Activity Access")
@@ -184,6 +198,12 @@ class AdminUserCreateForm(UserCreationForm):
     can_edit_tinymce_source = forms.BooleanField(required=False, label="TinyMCE Source Code")
     can_manage_letterheads = forms.BooleanField(required=False, label="Letterhead Upload")
     can_manage_users = forms.BooleanField(required=False, label="User Management")
+    master_access = forms.MultipleChoiceField(
+        choices=[(key, label) for key, label, _codenames in MASTER_ACCESS_OPTIONS],
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Master Access",
+    )
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -217,7 +237,7 @@ class AdminUserCreateForm(UserCreationForm):
             "is_staff",
             "is_checked_by",
             "is_person_incharge",
-            "can_edit_masters",
+            "master_access",
             "can_delete_bookings",
             "can_view_data_sheet",
             "can_view_user_activity",
@@ -242,7 +262,6 @@ class AdminUserCreateForm(UserCreationForm):
         self.fields["is_staff"].widget.attrs["class"] = "form-check-input"
         self.fields["is_checked_by"].widget.attrs["class"] = "form-check-input"
         self.fields["is_person_incharge"].widget.attrs["class"] = "form-check-input"
-        self.fields["can_edit_masters"].widget.attrs["class"] = "form-check-input"
         self.fields["can_delete_bookings"].widget.attrs["class"] = "form-check-input"
         self.fields["can_view_data_sheet"].widget.attrs["class"] = "form-check-input"
         self.fields["can_view_user_activity"].widget.attrs["class"] = "form-check-input"
@@ -262,7 +281,7 @@ class AdminUserCreateForm(UserCreationForm):
         user.last_name = (self.cleaned_data.get("last_name") or "").strip()
         checked_by = bool(self.cleaned_data.get("is_checked_by"))
         person_incharge = bool(self.cleaned_data.get("is_person_incharge"))
-        can_edit_masters = bool(self.cleaned_data.get("can_edit_masters"))
+        master_access = self.cleaned_data.get("master_access") or []
         can_delete_bookings = bool(self.cleaned_data.get("can_delete_bookings"))
         can_view_data_sheet = bool(self.cleaned_data.get("can_view_data_sheet"))
         can_view_user_activity = bool(self.cleaned_data.get("can_view_user_activity"))
@@ -277,8 +296,7 @@ class AdminUserCreateForm(UserCreationForm):
             user.save()
             user.groups.set(self.cleaned_data.get("groups"))
             selected_permissions = list(self.cleaned_data.get("permissions") or [])
-            if can_edit_masters:
-                selected_permissions.extend(list(_master_permissions_queryset()))
+            selected_permissions.extend(_master_permissions_for_keys(master_access))
             if can_delete_bookings:
                 delete_booking_permission = _delete_booking_permission()
                 if delete_booking_permission:
@@ -340,7 +358,6 @@ class AdminUserUpdateForm(forms.ModelForm):
     is_active = forms.BooleanField(required=False)
     is_checked_by = forms.BooleanField(required=False, label="Checked By")
     is_person_incharge = forms.BooleanField(required=False, label="Person In-charge")
-    can_edit_masters = forms.BooleanField(required=False, label="Edit Masters")
     can_delete_bookings = forms.BooleanField(required=False, label="Delete Booking Access")
     can_view_data_sheet = forms.BooleanField(required=False, label="Data Sheet Access")
     can_view_user_activity = forms.BooleanField(required=False, label="User Activity Access")
@@ -350,6 +367,12 @@ class AdminUserUpdateForm(forms.ModelForm):
     can_edit_tinymce_source = forms.BooleanField(required=False, label="TinyMCE Source Code")
     can_manage_letterheads = forms.BooleanField(required=False, label="Letterhead Upload")
     can_manage_users = forms.BooleanField(required=False, label="User Management")
+    master_access = forms.MultipleChoiceField(
+        choices=[(key, label) for key, label, _codenames in MASTER_ACCESS_OPTIONS],
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Master Access",
+    )
     signature_file = forms.FileField(required=False)
     first_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     last_name = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -382,7 +405,7 @@ class AdminUserUpdateForm(forms.ModelForm):
             "is_staff",
             "is_checked_by",
             "is_person_incharge",
-            "can_edit_masters",
+            "master_access",
             "can_delete_bookings",
             "can_view_data_sheet",
             "can_view_user_activity",
@@ -409,7 +432,6 @@ class AdminUserUpdateForm(forms.ModelForm):
         self.fields["is_active"].widget.attrs["class"] = "form-check-input"
         self.fields["is_checked_by"].widget.attrs["class"] = "form-check-input"
         self.fields["is_person_incharge"].widget.attrs["class"] = "form-check-input"
-        self.fields["can_edit_masters"].widget.attrs["class"] = "form-check-input"
         self.fields["can_delete_bookings"].widget.attrs["class"] = "form-check-input"
         self.fields["can_view_data_sheet"].widget.attrs["class"] = "form-check-input"
         self.fields["can_view_user_activity"].widget.attrs["class"] = "form-check-input"
@@ -428,9 +450,7 @@ class AdminUserUpdateForm(forms.ModelForm):
             self.fields["is_checked_by"].initial = self.instance.groups.filter(name="Checked By").exists()
             self.fields["is_person_incharge"].initial = self.instance.groups.filter(name="Incharge").exists()
             self.fields["permissions"].initial = self.instance.user_permissions.all()
-            self.fields["can_edit_masters"].initial = self.instance.user_permissions.filter(
-                codename__in=MASTER_PERMISSION_CODENAMES
-            ).exists()
+            self.fields["master_access"].initial = _selected_master_access_keys(self.instance)
             self.fields["can_delete_bookings"].initial = self.instance.user_permissions.filter(
                 content_type__app_label="bookings",
                 codename="delete_booking",
@@ -468,7 +488,7 @@ class AdminUserUpdateForm(forms.ModelForm):
 
         checked_by = bool(self.cleaned_data.get("is_checked_by"))
         person_incharge = bool(self.cleaned_data.get("is_person_incharge"))
-        can_edit_masters = bool(self.cleaned_data.get("can_edit_masters"))
+        master_access = self.cleaned_data.get("master_access") or []
         can_delete_bookings = bool(self.cleaned_data.get("can_delete_bookings"))
         can_view_data_sheet = bool(self.cleaned_data.get("can_view_data_sheet"))
         can_view_user_activity = bool(self.cleaned_data.get("can_view_user_activity"))
@@ -521,8 +541,7 @@ class AdminUserUpdateForm(forms.ModelForm):
 
             user.groups.set(desired_groups)
             selected_permissions = list(self.cleaned_data.get("permissions") or [])
-            if can_edit_masters:
-                selected_permissions.extend(list(_master_permissions_queryset()))
+            selected_permissions.extend(_master_permissions_for_keys(master_access))
             if can_delete_bookings:
                 delete_booking_permission = _delete_booking_permission()
                 if delete_booking_permission:

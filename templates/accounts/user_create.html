@@ -68,10 +68,18 @@
         <label class="form-check-label" for="id_is_person_incharge">Person In-charge</label>
       </div>
 
-      <div class="col-md-3 form-check mt-4 ms-3">
-        {{ form.can_edit_masters }}
-        <label class="form-check-label" for="id_can_edit_masters">Edit Masters</label>
-        <div class="form-text">Allow add, edit, delete, and view access for all masters.</div>
+      <div class="col-md-12 mt-3">
+        <label class="form-label">{{ form.master_access.label }}</label>
+        <div class="row g-3">
+          {% for checkbox in form.master_access %}
+          <div class="col-md-3 form-check">
+            {{ checkbox.tag }}
+            <label class="form-check-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="form-text">Choose only the individual masters this user may add, edit, delete, and view.</div>
+        {{ form.master_access.errors }}
       </div>
 
       <div class="col-md-3 form-check mt-4 ms-3">
