@@ -3,15 +3,21 @@
 <div class="coa-print-wrapper {% if is_plain_doc %}coa-plain{% else %}coa-report-sheet{% endif %} coa-page-continuation {% if is_test_report %}coa-test-report{% else %}coa-coa-report{% endif %}{% if coa_letterhead %} coa-letterhead-custom coa-letterhead-custom--{{ coa_letterhead.layout_mode }}{% if coa_letterhead.middle_image %} coa-letterhead-custom--middle{% endif %}{% endif %}" data-page-number="">
   {% if not is_plain_doc and coa_letterhead %}
   {% if coa_letterhead.layout_mode == 'full' and coa_letterhead.full_image %}
-  <div class="coa-page-brand coa-page-brand--full" aria-hidden="true" style="background-image:url('{{ coa_letterhead.full_image.url }}');"></div>
+  <div class="coa-page-brand coa-page-brand--full" aria-hidden="true">
+    <img class="coa-letterhead-image coa-letterhead-image--full" src="{{ coa_letterhead.full_image.url }}" alt="Letterhead image">
+  </div>
   {% elif coa_letterhead.layout_mode == 'parts' %}
-  {% if coa_letterhead.header_image %}<div class="coa-page-brand coa-page-brand--header" aria-hidden="true" style="background-image:url('{{ coa_letterhead.header_image.url }}');"></div>{% endif %}
-  {% if coa_letterhead.footer_image %}<div class="coa-page-brand coa-page-brand--footer" aria-hidden="true" style="background-image:url('{{ coa_letterhead.footer_image.url }}');"></div>{% endif %}
+  {% if coa_letterhead.header_image %}<div class="coa-page-brand coa-page-brand--header" aria-hidden="true"><img class="coa-letterhead-image coa-letterhead-image--header" src="{{ coa_letterhead.header_image.url }}" alt="Letterhead header"></div>{% endif %}
+  {% if coa_letterhead.footer_image %}<div class="coa-page-brand coa-page-brand--footer" aria-hidden="true"><img class="coa-letterhead-image coa-letterhead-image--footer" src="{{ coa_letterhead.footer_image.url }}" alt="Letterhead footer"></div>{% endif %}
   {% endif %}
   {% endif %}
   <div class="coa-body">
     {% if not is_plain_doc and coa_letterhead %}
-    <div class="coa-page-watermark coa-page-watermark--middle"{% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.middle_image %} style="background-image:url('{{ coa_letterhead.middle_image.url }}');"{% endif %} aria-hidden="true"></div>
+    {% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.middle_image %}
+    <img class="coa-page-watermark coa-page-watermark--middle" src="{{ coa_letterhead.middle_image.url }}" alt="Letterhead watermark" aria-hidden="true">
+    {% else %}
+    <div class="coa-page-watermark coa-page-watermark--middle" aria-hidden="true"></div>
+    {% endif %}
     {% endif %}
     {% if report.final_outcome == 'draft' %}
       <div class="coa-draft-watermark">DRAFT</div>
@@ -83,15 +89,21 @@
 <div class="coa-print-wrapper {% if is_plain_doc %}coa-plain{% else %}coa-report-sheet{% endif %} {% if is_test_report %}coa-test-report{% else %}coa-coa-report{% endif %}{% if coa_letterhead %} coa-letterhead-custom coa-letterhead-custom--{{ coa_letterhead.layout_mode }}{% if coa_letterhead.middle_image %} coa-letterhead-custom--middle{% endif %}{% endif %}">
   {% if not is_plain_doc and coa_letterhead %}
   {% if coa_letterhead.layout_mode == 'full' and coa_letterhead.full_image %}
-  <div class="coa-page-brand coa-page-brand--full" aria-hidden="true" style="background-image:url('{{ coa_letterhead.full_image.url }}');"></div>
+  <div class="coa-page-brand coa-page-brand--full" aria-hidden="true">
+    <img class="coa-letterhead-image coa-letterhead-image--full" src="{{ coa_letterhead.full_image.url }}" alt="Letterhead image">
+  </div>
   {% elif coa_letterhead.layout_mode == 'parts' %}
-  {% if coa_letterhead.header_image %}<div class="coa-page-brand coa-page-brand--header" aria-hidden="true" style="background-image:url('{{ coa_letterhead.header_image.url }}');"></div>{% endif %}
-  {% if coa_letterhead.footer_image %}<div class="coa-page-brand coa-page-brand--footer" aria-hidden="true" style="background-image:url('{{ coa_letterhead.footer_image.url }}');"></div>{% endif %}
+  {% if coa_letterhead.header_image %}<div class="coa-page-brand coa-page-brand--header" aria-hidden="true"><img class="coa-letterhead-image coa-letterhead-image--header" src="{{ coa_letterhead.header_image.url }}" alt="Letterhead header"></div>{% endif %}
+  {% if coa_letterhead.footer_image %}<div class="coa-page-brand coa-page-brand--footer" aria-hidden="true"><img class="coa-letterhead-image coa-letterhead-image--footer" src="{{ coa_letterhead.footer_image.url }}" alt="Letterhead footer"></div>{% endif %}
   {% endif %}
   {% endif %}
   <div class="coa-body">
     {% if not is_plain_doc and coa_letterhead %}
-    <div class="coa-page-watermark coa-page-watermark--middle"{% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.middle_image %} style="background-image:url('{{ coa_letterhead.middle_image.url }}');"{% endif %} aria-hidden="true"></div>
+    {% if coa_letterhead.layout_mode == 'parts' and coa_letterhead.middle_image %}
+    <img class="coa-page-watermark coa-page-watermark--middle" src="{{ coa_letterhead.middle_image.url }}" alt="Letterhead watermark" aria-hidden="true">
+    {% else %}
+    <div class="coa-page-watermark coa-page-watermark--middle" aria-hidden="true"></div>
+    {% endif %}
     {% endif %}
     {% if report.final_outcome == 'draft' %}
       <div class="coa-draft-watermark">DRAFT</div>

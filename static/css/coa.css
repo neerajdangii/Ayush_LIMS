@@ -20,7 +20,9 @@
   }
 
   /* Physical letterhead prints slightly higher; push the first-page header down. */
-  .coa-plain:not(.coa-page-continuation) .coa-page-header {
+  .coa-plain:not(.coa-page-continuation) .coa-page-header,
+  .coa-letterhead-custom--full:not(.coa-page-continuation) .coa-page-header,
+  .coa-letterhead-custom--middle:not(.coa-page-continuation) .coa-page-header {
     margin-top: 4mm;
   }
 }
@@ -156,11 +158,22 @@ body.coa-rendered-ok #coa-page-first {
   position: absolute;
   left: 0;
   right: 0;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100% 100%;
+  background: transparent;
   pointer-events: none;
   z-index: 0;
+}
+
+.coa-letterhead-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+}
+
+.coa-letterhead-image--full {
+  object-fit: fill;
 }
 
 .coa-page-brand--header {
@@ -248,11 +261,12 @@ body.coa-rendered-ok #coa-page-first {
 }
 
 .coa-letterhead-custom--middle .coa-page-watermark--middle {
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
   display: block;
   inset: 36mm 0 36mm;
+  width: 100%;
+  height: calc(100% - 72mm);
+  object-fit: contain;
+  object-position: center;
   opacity: 1;
   pointer-events: none;
   position: absolute;

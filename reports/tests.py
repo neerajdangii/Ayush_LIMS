@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase
 
 from bookings.models import Booking
@@ -55,3 +58,38 @@ class TDSRenderingSafetyTests(SimpleTestCase):
         rendered = _render_tds_content("", booking, req, TDSDocumentTemplate.DocumentType.AC)
 
         self.assertIn("CHECKLIST FOR ANALYTICAL DATA REVIEW", rendered)
+
+    def test_full_letterhead_renders_as_img_elements_for_print_stability(self):
+        letterhead = SimpleNamespace(
+            layout_mode="full",
+            full_image=SimpleNamespace(url="/media/coa_letterhead.png"),
+            header_image=None,
+            footer_image=None,
+            middle_image=None,
+        )
+        report = SimpleNamespace(
+            final_outcome="approved",
+            manager_signature="",
+            incharge_signature="",
+            manager_name="",
+            incharge_name="",
+            manager=None,
+            incharge=None,
+        )
+
+        rendered = render_to_string(
+            "reports/partials/coa_letterhead.html",
+            {
+                "coa_letterhead": letterhead,
+                "report": report,
+                "is_plain_doc": False,
+                "is_test_report": False,
+                "qr_payload": "payload",
+                "qr_image_data": None,
+                "initial_result_html": "",
+                "initial_tail_html": "",
+            },
+        )
+
+        self.assertIn('class="coa-letterhead-image coa-letterhead-image--full"', rendered)
+        self.assertNotIn("background-image:url(", rendered)
