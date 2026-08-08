@@ -76,7 +76,7 @@
         {{ form.content }}
         {{ form.content.errors }}
         <div class="text-muted small mt-1">
-          {% verbatim %}You can use booking placeholders such as {{ sample_name }}, {{ sample_number }}, {{ batch_no }}, {{ sample_reg_no }}, {{ customer_name }}, {{ sample_receipt_date }}. Use [[page_break]] where this master should continue on the next numbered page. Do not use fixed pixel heights on outer page tables; add class="tds-template-signature" to a signature block that must stay together.{% endverbatim %}
+          {% verbatim %}You can use booking placeholders such as {{ sample_name }}, {{ sample_number }}, {{ batch_no }}, {{ sample_reg_no }}, {{ customer_name }}, {{ sample_receipt_date }}. Use either [[page_break]] or page-break-before: always on the next table/div (never both); both create the same numbered page. Do not use fixed pixel heights on outer page tables; add class="tds-template-signature" to a signature block that must stay together.{% endverbatim %}
         </div>
       </div>
       <div class="col-12">

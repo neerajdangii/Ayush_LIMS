@@ -43,7 +43,7 @@ class TDSRenderingSafetyTests(SimpleTestCase):
         self.assertIn("First page", pages[0])
         self.assertIn("Second page", pages[1])
 
-    def test_split_tds_rendered_pages_preserves_break_rule_on_content_table(self):
+    def test_split_tds_rendered_pages_splits_on_break_rule_on_content_table(self):
         content = (
             "<table><tr><td>First page</td></tr></table>"
             "<table style='page-break-before: always;'><tr><td>Second page</td></tr></table>"
@@ -51,9 +51,10 @@ class TDSRenderingSafetyTests(SimpleTestCase):
 
         pages = _split_tds_rendered_pages(content)
 
-        self.assertEqual(len(pages), 1)
-        self.assertIn("page-break-before: always", pages[0])
-        self.assertIn("Second page", pages[0])
+        self.assertEqual(len(pages), 2)
+        self.assertIn("First page", pages[0])
+        self.assertIn("Second page", pages[1])
+        self.assertNotIn("page-break-before", pages[1])
 
     def test_split_tds_rendered_pages_removes_duplicate_break_after_marker(self):
         content = (

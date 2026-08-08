@@ -231,19 +231,35 @@ def _split_tds_rendered_pages(content):
         content,
         flags=re.IGNORECASE,
     )
-    # Only turn an *empty* legacy break marker into a separate master page.
-    # A break rule on a real table/div must remain in the HTML: replacing its
-    # opening tag leaves the closing tag behind and produces malformed output
-    # (often seen as clipped content or an unexpected blank page when printed).
-    content = re.sub(
-        r"<(?P<tag>div|p|span)\b(?=[^>]*\bstyle=['\"][^'\"]*"
-        r"(?:page-break-before|page-break-after|break-before|break-after)\s*:"
-        r"[^'\"]*(?:always|page|left|right)[^'\"]*['\"])[^>]*>"
-        r"(?:\s|&nbsp;|&#160;)*</(?P=tag)>",
-        marker,
-        content,
+    # Treat a page break placed on any real TinyMCE element exactly like the
+    # explicit [[page_break]] marker.  Keep the element itself in the next
+    # fragment and remove only its break declaration; otherwise Chrome sees
+    # both our generated page and the original CSS page and skips a sheet.
+    break_before_re = re.compile(
+        r'(?P<open><(?P<tag>[A-Za-z][\w:-]*)\b(?P<before>[^>]*?\bstyle\s*=\s*)'
+        r'(?P<quote>["\'])(?P<style>[^"\']*)(?P=quote)(?P<after>[^>]*)>)',
         flags=re.IGNORECASE,
     )
+
+    def replace_break_before(match):
+        style = match.group("style")
+        cleaned_style = re.sub(
+            r'(?:^|;)\s*(?:page-break-before|break-before)\s*:\s*'
+            r'(?:always|page|left|right)\s*;?',
+            ';',
+            style,
+            flags=re.IGNORECASE,
+        )
+        if cleaned_style == style:
+            return match.group("open")
+        cleaned_style = re.sub(r';\s*;', ';', cleaned_style).strip(' ;')
+        opening_tag = (
+            f'<{match.group("tag")}{match.group("before")}'
+            f'{match.group("quote")}{cleaned_style}{match.group("quote")}{match.group("after")}>'
+        )
+        return marker + opening_tag
+
+    content = break_before_re.sub(replace_break_before, content)
     parts = [part.strip() for part in content.split(marker) if part and part.strip()]
 
     # Authors commonly use [[page_break]] and retain the page-break-before
