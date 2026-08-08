@@ -1065,22 +1065,20 @@
       object-fit: contain;
     }
     /*
-     * Job Order footer: keep it in normal flow and let flex consume only the
-     * unused page height.  This makes signatures independent of TinyMCE
-     * spacer divs and lets a genuinely long order continue onto later pages.
+     * Keep the Job Order footer anchored to the printable page.  The order
+     * body must remain content-sized: making it a full-height flex item adds
+     * a second, otherwise blank, page for short test lists.
      */
     .tds-template-content {
       box-sizing: border-box !important;
-      display: flex !important;
-      flex-direction: column !important;
-      padding-bottom: 8mm !important;
+      display: block !important;
+      padding-bottom: 0 !important;
     }
     .tds-template-content > .tds-job-order {
       box-sizing: border-box !important;
-      display: flex !important;
-      flex: 1 0 auto !important;
-      flex-direction: column !important;
-      min-height: 100% !important;
+      display: block !important;
+      height: auto !important;
+      min-height: 0 !important;
       padding-bottom: 0 !important;
     }
     .tds-template-content > div[style*="min-height"],
@@ -1266,6 +1264,55 @@
       page-break-inside: avoid;
       break-inside: avoid;
     }
+    /*
+       Editable TDS masters can contain long result tables.  Let their body
+       flow across printed pages; keeping the whole outer table/section
+       together is what caused the trailing Result and signature content to
+       be moved or clipped.  Individual rows and explicit signature blocks
+       remain intact.
+    */
+    .tds-master-print-page,
+    .tds-master-page-body,
+    .tds-master-page-body .tds-template-content {
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-master-page-body .tds-template-content table,
+    .tds-master-page-body .tds-template-content table tbody {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-master-page-body .tds-template-content tr,
+    .tds-master-page-body .tds-template-signature {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    /* Use one predictable printable width instead of the slightly oversized
+       percentages produced by Word/TinyMCE.  This prevents Chrome/Edge from
+       silently using a different Fit-to-page scale on another workstation. */
+    .tds-master-page-body .tds-template-content,
+    .tds-master-page-body .tds-template-content * {
+      box-sizing: border-box !important;
+    }
+    .tds-master-page-body .tds-template-content table {
+      max-width: 100% !important;
+      width: 100% !important;
+    }
+    .tds-master-page-body .tds-template-content td,
+    .tds-master-page-body .tds-template-content th {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    /* Word/TinyMCE often leaves a page-sized pixel height on the outer table.
+       It is a screen-editor artefact, not a printable page boundary, and can
+       otherwise force the Result/signature content onto a blank third page. */
+    .tds-master-page-body > .tds-template-content > table[style*="height"],
+    .tds-master-page-body > .tds-template-content > table[style*="height"] > tbody > tr[style*="height"] {
+      height: auto !important;
+    }
     {% if document_type == 'ac' %}
     /* AC is a single A4 checklist: let its long table use the remaining page space. */
     .tds-template-content .tds-ac-document {
@@ -1421,9 +1468,9 @@
           {% if can_edit_tds_template and forloop.first %}
           <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
           {% endif %}
-          {% if item.header_content %}<div class="tds-template-content tds-master-page-header">{{ item.header_content|safe }}</div>{% endif %}
-          <div class="tds-master-page-body"><div class="tds-template-content">{{ page|strip_hfb|safe }}</div></div>
-          {% if item.footer_content %}<div class="tds-template-content tds-master-page-footer">{{ item.footer_content|safe }}</div>{% endif %}
+          {% if page.header_content %}<div class="tds-template-content tds-master-page-header">{{ page.header_content|safe }}</div>{% endif %}
+          <div class="tds-master-page-body"><div class="tds-template-content">{{ page.content|strip_hfb|safe }}</div></div>
+          {% if page.footer_content %}<div class="tds-template-content tds-master-page-footer">{{ page.footer_content|safe }}</div>{% endif %}
         </section>
         {% empty %}
         <section class="tds-master-print-page"><div class="alert alert-info py-2 mb-0">Printable content is empty.</div></section>

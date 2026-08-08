@@ -231,13 +231,47 @@ def _split_tds_rendered_pages(content):
         content,
         flags=re.IGNORECASE,
     )
+    # Only turn an *empty* legacy break marker into a separate master page.
+    # A break rule on a real table/div must remain in the HTML: replacing its
+    # opening tag leaves the closing tag behind and produces malformed output
+    # (often seen as clipped content or an unexpected blank page when printed).
     content = re.sub(
-        r"<[^>]+style=['\"][^'\"]*(?:page-break-before|page-break-after|break-before|break-after)\s*:[^'\"]*(?:always|page|left|right)[^'\"]*['\"][^>]*>",
+        r"<(?P<tag>div|p|span)\b(?=[^>]*\bstyle=['\"][^'\"]*"
+        r"(?:page-break-before|page-break-after|break-before|break-after)\s*:"
+        r"[^'\"]*(?:always|page|left|right)[^'\"]*['\"])[^>]*>"
+        r"(?:\s|&nbsp;|&#160;)*</(?P=tag)>",
         marker,
         content,
         flags=re.IGNORECASE,
     )
     parts = [part.strip() for part in content.split(marker) if part and part.strip()]
+
+    # Authors commonly use [[page_break]] and retain the page-break-before
+    # style imported from Word on the first table of the next page.  The
+    # marker already created that page, so leaving the style in place causes
+    # the browser to advance once more and insert a blank sheet.
+    leading_break_re = re.compile(
+        r'^(?P<prefix>\s*<(?:table|div|section|p)\b[^>]*?\bstyle\s*=\s*)'
+        r'(?P<quote>["\'])(?P<style>[^"\']*)(?P=quote)(?P<suffix>[^>]*>)',
+        flags=re.IGNORECASE,
+    )
+
+    def remove_redundant_leading_break(part):
+        def replace(match):
+            style = re.sub(
+                r'(?:^|;)\s*(?:page-break-before|break-before)\s*:\s*'
+                r'(?:always|page|left|right)\s*;?',
+                ';',
+                match.group("style"),
+                flags=re.IGNORECASE,
+            )
+            style = re.sub(r';\s*;', ';', style).strip(' ;')
+            return f'{match.group("prefix")}{match.group("quote")}{style}{match.group("quote")}{match.group("suffix")}'
+
+        return leading_break_re.sub(replace, part, count=1)
+
+    if len(parts) > 1:
+        parts = [parts[0], *(remove_redundant_leading_break(part) for part in parts[1:])]
     return parts or [content]
 
 
@@ -1541,14 +1575,37 @@ class BookingTDSDocumentView(PermissionRequiredMixin, RoleRequiredMixin, Templat
             content = "" if use_source_file else _render_tds_content(
                 template.content, booking, self.request, document_type, inject_booking=inject_for_template
             )
+            header_content = _render_tds_template_fragment(
+                template.header_content, booking, self.request, inject_booking=inject_for_template
+            )
+            footer_content = _render_tds_template_fragment(
+                template.footer_content, booking, self.request, inject_booking=inject_for_template
+            )
+            pages = []
+            if not use_source_file:
+                content = content.replace("[[page_number]]", '<span class="tds-page-current"></span>')
+                content = content.replace("[[total_pages]]", '<span class="tds-page-total"></span>')
+                split_pages = _split_tds_rendered_pages(content)
+                if document_type == TDSDocumentTemplate.DocumentType.ADS:
+                    pages = [mark_safe(page) for page in split_pages]
+                else:
+                    total_pages = len(split_pages)
+                    pages = [
+                        {
+                            "content": mark_safe(_fill_tds_page_placeholders(page, index, total_pages)),
+                            "header_content": mark_safe(_fill_tds_page_placeholders(header_content, index, total_pages)),
+                            "footer_content": mark_safe(_fill_tds_page_placeholders(footer_content, index, total_pages)),
+                        }
+                        for index, page in enumerate(split_pages, start=1)
+                    ]
             rendered_templates.append(
                 {
                     "template": template,
                     "test": template.test,
-                    "header_content": mark_safe(_render_tds_template_fragment(template.header_content, booking, self.request, inject_booking=inject_for_template)),
+                    "header_content": mark_safe(header_content),
                     "content": "" if use_source_file else mark_safe(content),
-                    "pages": [] if use_source_file else [mark_safe(page) for page in _split_tds_rendered_pages(content)],
-                    "footer_content": mark_safe(_render_tds_template_fragment(template.footer_content, booking, self.request, inject_booking=inject_for_template)),
+                    "pages": pages,
+                    "footer_content": mark_safe(footer_content),
                     "use_source_file": use_source_file,
                     "source_preview": source_preview,
                 }
