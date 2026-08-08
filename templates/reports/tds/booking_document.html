@@ -1444,6 +1444,34 @@
       flex: 1 1 auto !important;
     }
     {% endif %}
+    {% if document_type == 'job_order' %}
+    /* Keep the Job Order signature/page block with the master footer.  An
+       outer page anchor is more reliable than an inner fixed element when
+       Chromium paginates the order body. */
+    .tds-master-print-page {
+      height: 275mm !important;
+      min-height: 275mm !important;
+      position: relative !important;
+    }
+    .tds-master-print-page .tds-master-page-footer {
+      bottom: 0 !important;
+      left: 0 !important;
+      margin-top: 0 !important;
+      position: absolute !important;
+      right: 0 !important;
+    }
+    .tds-master-print-page .tds-master-page-body {
+      box-sizing: border-box !important;
+      /* Reserve the signature and page-number area as table rows change. */
+      padding-bottom: 32mm !important;
+    }
+    .tds-master-print-page .tds-master-page-footer .tds-job-footer {
+      bottom: auto !important;
+      left: auto !important;
+      position: static !important;
+      right: auto !important;
+    }
+    {% endif %}
   }
 </style>
 {% endblock %}
