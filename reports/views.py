@@ -1135,13 +1135,17 @@ def _unwrap_tds_outer_table(content):
     if not match:
         return content
 
-    # A real form header often starts with a table containing multiple cells.
-    # Do not mistake that first form table for a one-cell editor wrapper.
+    # A real form can start with one wide cell and add more rows below it.
+    # Only unwrap a genuine one-cell editor wrapper, never a multi-row form.
     first_row_end = re.search(r"</tr\s*>", content, flags=re.IGNORECASE)
     if not first_row_end:
         return content
     first_row = content[: first_row_end.end()]
-    if len(re.findall(r"<td\b", first_row, flags=re.IGNORECASE)) != 1:
+    if (
+        len(re.findall(r"<tr\b", content, flags=re.IGNORECASE)) != 1
+        or len(re.findall(r"<td\b", content, flags=re.IGNORECASE)) != 1
+        or len(re.findall(r"<td\b", first_row, flags=re.IGNORECASE)) != 1
+    ):
         return content
 
     table_attrs = match.group("table_attrs") or ""

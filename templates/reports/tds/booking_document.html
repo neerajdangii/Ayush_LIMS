@@ -179,6 +179,38 @@
     margin-top: auto;
     padding-top: 4mm;
   }
+  {% if document_type == 'cs' %}
+  /* The continuation sheet has an intentionally short, blank body.  Anchor
+     its document footer to the physical page instead of relying on the
+     flexible body height, which some print engines collapse. */
+  .tds-master-print-page {
+    height: 280mm;
+    min-height: 280mm;
+    position: relative;
+  }
+  .tds-master-page-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Keep the blank writing table above the anchored page footer. */
+    padding-bottom: 9mm;
+  }
+  .tds-master-page-body > .tds-template-content {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .tds-master-page-body > .tds-template-content > table {
+    flex: 1 1 auto;
+  }
+  .tds-master-page-footer {
+    bottom: 0;
+    left: 0;
+    margin-top: 0;
+    position: absolute;
+    right: 0;
+  }
+  {% endif %}
   /* Paste this class into an optional TinyMCE footer when the document
      number needs custom formatting. */
   .tds-custom-page-footer {
@@ -1306,13 +1338,17 @@
       overflow-wrap: anywhere;
       word-break: break-word;
     }
+    {% if document_type != 'cs' %}
     /* Word/TinyMCE often leaves a page-sized pixel height on the outer table.
        It is a screen-editor artefact, not a printable page boundary, and can
-       otherwise force the Result/signature content onto a blank third page. */
+       otherwise force the Result/signature content onto a blank third page.
+       The continuation sheet is intentionally a blank, full-height table, so
+       its authored table and row heights must be retained. */
     .tds-master-page-body > .tds-template-content > table[style*="height"],
     .tds-master-page-body > .tds-template-content > table[style*="height"] > tbody > tr[style*="height"] {
       height: auto !important;
     }
+    {% endif %}
     {% if document_type == 'ac' %}
     /* AC is a single A4 checklist: let its long table use the remaining page space. */
     .tds-template-content .tds-ac-document {
@@ -1375,6 +1411,39 @@
       flex: 0 0 auto;
       margin-top: auto !important;
     }
+    {% if document_type == 'cs' %}
+    /* The general print normalizer clears master-page heights.  Restore the
+       continuation-sheet page height after that normalizer so its footer is
+       anchored to the actual bottom edge of the printed A4 page. */
+    .tds-master-print-page {
+      height: 280mm !important;
+      min-height: 280mm !important;
+      position: relative !important;
+    }
+    .tds-master-print-page .tds-master-page-footer {
+      bottom: 0 !important;
+      left: 0 !important;
+      margin-top: 0 !important;
+      position: absolute !important;
+      right: 0 !important;
+    }
+    .tds-master-print-page .tds-master-page-body {
+      display: flex !important;
+      flex: 1 1 auto !important;
+      height: auto !important;
+      min-height: 0 !important;
+      padding-bottom: 9mm !important;
+    }
+    .tds-master-print-page .tds-master-page-body > .tds-template-content {
+      display: flex !important;
+      flex: 1 1 auto !important;
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    .tds-master-print-page .tds-master-page-body > .tds-template-content > table {
+      flex: 1 1 auto !important;
+    }
+    {% endif %}
   }
 </style>
 {% endblock %}
