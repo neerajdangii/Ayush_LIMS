@@ -131,6 +131,7 @@ class Booking(models.Model):
     tracking_code = models.CharField(max_length=16, unique=True, editable=False, blank=True, default="")
     sample_reg_no = models.CharField(max_length=32, unique=True, null=True, blank=True)
     manual_certificate_no = models.CharField(max_length=64, blank=True, null=True)
+    certificate_serial = models.PositiveIntegerField(null=True, blank=True, editable=False)
     sample_qty = models.CharField(max_length=100, blank=True)
     sample_location = models.CharField(max_length=255, blank=True)
     packaging_mode = models.CharField(max_length=255, blank=True)
@@ -180,7 +181,7 @@ class Booking(models.Model):
 
     @property
     def certificate_no(self) -> str:
-        """Return the booking certificate number using the configured numbering mode."""
+        """Return the booking certificate number using its assigned serial."""
         if self.manual_certificate_no:
             return self.manual_certificate_no
 
@@ -191,37 +192,49 @@ class Booking(models.Model):
         if timezone.is_aware(receipt_date):
             receipt_date = timezone.localtime(receipt_date)
 
-        numbering_mode = None
+        numbering_mode = self._certificate_numbering_mode()
+
+        sequence = self.certificate_serial or self._calculate_certificate_serial(numbering_mode)
+
+        if numbering_mode == "continuous":
+            return f"ARL/{self.booking_type_code}/{receipt_date.strftime('%y%m%d')}{sequence:04d}"
+
+        return f"ARL/{self.booking_type_code}/{receipt_date.strftime('%y%m%d')}{sequence:03d}"
+
+    @staticmethod
+    def _certificate_numbering_mode():
         try:
             from django.apps import apps
 
             SystemSetting = apps.get_model("accounts", "SystemSetting")
-            numbering_mode = SystemSetting.current().certificate_numbering_mode
+            return SystemSetting.current().certificate_numbering_mode
         except Exception:
-            numbering_mode = None
+            return None
+
+    def _calculate_certificate_serial(self, numbering_mode=None) -> int:
+        """Calculate the serial only when initially assigning it to a booking."""
+        if not self.pk:
+            return 1
 
         if numbering_mode == "continuous":
-            if not self.pk:
-                sequence = 1
-            else:
-                sequence = Booking.objects.filter(
-                    booking_type=self.booking_type,
-                    pk__lte=self.pk,
-                ).count()
-            return f"ARL/{self.booking_type_code}/{receipt_date.strftime('%y%m%d')}{sequence:04d}"
-
-        if not self.pk:
-            sequence = 1
-        else:
-            date_field = "sample_receipt_date" if self.sample_receipt_date else "booking_date"
-            sequence = Booking.objects.filter(
-                **{f"{date_field}__date": receipt_date.date()},
-            ).filter(
-                Q(**{f"{date_field}__lt": receipt_date})
-                | Q(**{date_field: receipt_date, "pk__lte": self.pk})
+            return Booking.objects.filter(
+                booking_type=self.booking_type,
+                pk__lte=self.pk,
             ).count()
 
-        return f"ARL/{self.booking_type_code}/{receipt_date.strftime('%y%m%d')}{sequence:03d}"
+        receipt_date = self.sample_receipt_date or self.booking_date
+        if not receipt_date:
+            return 1
+        if timezone.is_aware(receipt_date):
+            receipt_date = timezone.localtime(receipt_date)
+
+        date_field = "sample_receipt_date" if self.sample_receipt_date else "booking_date"
+        return Booking.objects.filter(
+            **{f"{date_field}__date": receipt_date.date()},
+        ).filter(
+            Q(**{f"{date_field}__lt": receipt_date})
+            | Q(**{date_field: receipt_date, "pk__lte": self.pk})
+        ).count()
 
     @property
     def sample_registration_no(self) -> str:
@@ -286,22 +299,33 @@ class Booking(models.Model):
         ).order_by("-created_at").first()
 
     def save(self, *args, **kwargs):
+        is_new = self._state.adding
         if not self.tracking_code:
             self.tracking_code = self.generate_tracking_code()
         if self.sample_reg_no:
             super().save(*args, **kwargs)
+            self._assign_certificate_serial_if_needed(is_new)
             return
 
         for _ in range(3):
             self.sample_reg_no = self.generate_sample_reg_no()
             try:
                 super().save(*args, **kwargs)
+                self._assign_certificate_serial_if_needed(is_new)
                 return
             except IntegrityError:
                 self.sample_reg_no = None
                 self.tracking_code = self.generate_tracking_code()
                 continue
         raise IntegrityError("Unable to generate unique sample registration number.")
+
+    def _assign_certificate_serial_if_needed(self, is_new):
+        """Assign a serial once; later report/date edits must never renumber it."""
+        if not is_new or self.certificate_serial or not self.pk:
+            return
+
+        self.certificate_serial = self._calculate_certificate_serial(self._certificate_numbering_mode())
+        type(self).objects.filter(pk=self.pk).update(certificate_serial=self.certificate_serial)
 
     def approve(self, user):
         self.status = self.Status.APPROVED
