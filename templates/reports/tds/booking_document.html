@@ -106,7 +106,7 @@
   .tds-template-content {
     color: #000;
     font-family: "Times New Roman", Times, serif;
-    font-size: 12px;
+    font-size: 10px;
     line-height: 1.2;
   }
   .tds-template-content p { margin: 0 0 3px; }
@@ -1472,6 +1472,14 @@
       right: auto !important;
     }
     {% endif %}
+  }
+
+  /* All TDS masters, including ADS, use one approved document typeface and
+     size. This also overrides font styles retained from Word and TinyMCE. */
+  .tds-template-content,
+  .tds-template-content * {
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 10px !important;
   }
 </style>
 {% endblock %}

@@ -6,7 +6,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.paginator import Paginator
-from django.db import DatabaseError, IntegrityError, connection, transaction
+from django.db import DatabaseError, connection, transaction
 from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse, JsonResponse
@@ -46,6 +46,7 @@ from .models import (
     UOMMaster,
 )
 from .permissions import RoleRequiredMixin
+from .dashboard_cache import dashboard_metrics
 
 
 MASTER_CONFIG = {
@@ -115,6 +116,7 @@ MASTER_CONFIG = {
     },
 }
 INLINE_ALLOWED_MASTERS = {"customer", "submitter", "manufacturer", "sample-name", "test", "uom", "protocol"}
+BILLING_BULK_BATCH_SIZE = 200
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
@@ -122,14 +124,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["counts"] = Booking.objects.values("status").annotate(total=Count("id"))
-        context["reports_total"] = Report.objects.count()
-        context["report_templates_total"] = ReportTemplate.objects.count()
-        context["tds_templates_total"] = TDSDocumentTemplate.objects.count()
-        context["masters"] = [
-            {"slug": slug, "title": conf["title"], "count": conf["model"].objects.count()}
-            for slug, conf in MASTER_CONFIG.items()
-        ]
+        context.update(dashboard_metrics(MASTER_CONFIG))
         announcement = WelcomeAnnouncement.objects.first()
         if announcement and announcement.is_current:
             seen = AnnouncementSeen.objects.filter(announcement=announcement, user=self.request.user)
@@ -310,23 +305,34 @@ class BillingConfirmView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 # Do not join the nullable report table in that locking query.
                 locked_bookings = locked_bookings.select_for_update()
 
-            for booking in locked_bookings:
-                bill_number = billing_details[str(booking.pk)]
-                letter_date = booking.letter_date
-                billing_done_date = booking.report.analysis_end_date or booking.analysis_end_date
-                try:
-                    with transaction.atomic():
-                        BillingRecord.objects.create(
-                            booking=booking,
-                            confirmed_by=request.user,
-                            bill_number=bill_number,
-                            letter_date=letter_date,
-                            billing_done_date=billing_done_date,
-                        )
-                    confirmed += 1
-                except IntegrityError:
-                    # Another user may have confirmed the same sample at the same time.
-                    continue
+            existing_booking_ids = set(
+                BillingRecord.objects.filter(booking_id__in=[booking.pk for booking in locked_bookings])
+                .values_list("booking_id", flat=True)
+            )
+            records = [
+                BillingRecord(
+                    booking=booking,
+                    confirmed_by=request.user,
+                    bill_number=billing_details[str(booking.pk)],
+                    letter_date=booking.letter_date,
+                    billing_done_date=booking.report.analysis_end_date or booking.analysis_end_date,
+                )
+                for booking in locked_bookings
+                if booking.pk not in existing_booking_ids
+            ]
+            # Keep statements and locks bounded on large invoice selections.
+            # ignore_conflicts preserves the previous race-safe behavior when
+            # another request has already confirmed a booking.
+            for start in range(0, len(records), BILLING_BULK_BATCH_SIZE):
+                batch = records[start : start + BILLING_BULK_BATCH_SIZE]
+                BillingRecord.objects.bulk_create(
+                    batch,
+                    batch_size=BILLING_BULK_BATCH_SIZE,
+                    ignore_conflicts=True,
+                )
+            confirmed = BillingRecord.objects.filter(
+                booking_id__in=[record.booking_id for record in records]
+            ).count()
         if confirmed:
             messages.success(request, f"Billing confirmed for {confirmed} sample{'s' if confirmed != 1 else ''}.")
         else:

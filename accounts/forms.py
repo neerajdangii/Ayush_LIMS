@@ -1,6 +1,9 @@
 from django import forms
+from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import Group, Permission, User
+from django.db import transaction
+from django.utils import timezone
 
 from .models import SystemSetting, UserProfile, WelcomeAnnouncement
 
@@ -93,7 +96,7 @@ def _restrict_delegated_access(form, grantor):
         codename__in=allowed_permission_codenames
     )
     form.fields["groups"].queryset = grantor.groups.filter(
-        name__in=["Admin", "Manager", "Analyst"]
+        name__in=["Manager", "Analyst"]
     ).order_by("name")
     form.fields["master_access"].choices = [
         (key, label)
@@ -177,12 +180,44 @@ class SystemSettingForm(forms.ModelForm):
 
 class LoginForm(AuthenticationForm):
     username = forms.CharField(widget=forms.TextInput(attrs={"class": "form-control"}))
-    password = forms.CharField(widget=forms.PasswordInput(attrs={"class": "form-control"}))
+    password = forms.CharField(widget=forms.PasswordInput(attrs={"class": "form-control", "maxlength": "16"}))
 
     error_messages = {
         "invalid_login": "Invalid username or password.",
-        "inactive": "This user account is inactive.",
+        "inactive": "Invalid username or password.",
     }
+
+    def clean(self):
+        try:
+            return super().clean()
+        except forms.ValidationError:
+            username = self.cleaned_data.get("username")
+            password = self.cleaned_data.get("password")
+            if username and password:
+                self._record_failed_attempt(username, password)
+            raise
+
+    def confirm_login_allowed(self, user):
+        super().confirm_login_allowed(user)
+        UserProfile.objects.filter(user=user).update(failed_login_attempts=0, locked_at=None)
+
+    @staticmethod
+    def _record_failed_attempt(username, password):
+        """Lock only a known account with an incorrect password, silently."""
+        user_model = get_user_model()
+        with transaction.atomic():
+            user = user_model.objects.select_for_update().filter(username=username).first()
+            if not user or not user.is_active or user.check_password(password):
+                return
+            profile, _ = UserProfile.objects.select_for_update().get_or_create(user=user)
+            profile.failed_login_attempts += 1
+            update_fields = ["failed_login_attempts"]
+            if profile.failed_login_attempts >= 3:
+                user.is_active = False
+                user.save(update_fields=["is_active"])
+                profile.locked_at = timezone.now()
+                update_fields.append("locked_at")
+            profile.save(update_fields=update_fields)
 
 
 class AdminUserCreateForm(UserCreationForm):
@@ -260,8 +295,8 @@ class AdminUserCreateForm(UserCreationForm):
         self._editing_existing = False
         _restrict_delegated_access(self, grantor)
         self.fields["username"].widget.attrs["class"] = "form-control"
-        self.fields["password1"].widget.attrs["class"] = "form-control"
-        self.fields["password2"].widget.attrs["class"] = "form-control"
+        self.fields["password1"].widget.attrs.update({"class": "form-control", "maxlength": "16"})
+        self.fields["password2"].widget.attrs.update({"class": "form-control", "maxlength": "16"})
         self.fields["is_staff"].widget.attrs["class"] = "form-check-input"
         self.fields["is_checked_by"].widget.attrs["class"] = "form-check-input"
         self.fields["is_person_incharge"].widget.attrs["class"] = "form-check-input"
@@ -298,6 +333,7 @@ class AdminUserCreateForm(UserCreationForm):
         can_assign_bookings = bool(self.cleaned_data.get("can_assign_bookings"))
         can_assign_bookings = bool(self.cleaned_data.get("can_assign_bookings"))
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
+        user.is_active = True
         if commit:
             user.save()
             user.groups.set(self.cleaned_data.get("groups"))
@@ -507,8 +543,11 @@ class AdminUserUpdateForm(forms.ModelForm):
             self.fields["can_assign_bookings"].initial = self.instance.user_permissions.filter(
                 content_type__app_label="bookings", codename="assign_booking"
             ).exists()
+        if not (grantor and grantor.is_superuser):
+            self.fields["is_active"].disabled = True
 
     def save(self, commit=True):
+        originally_active = bool(self.instance.is_active)
         user = super().save(commit=False)
         user.email = self.cleaned_data.get("email", "")
         user.first_name = (self.cleaned_data.get("first_name") or "").strip()
@@ -527,7 +566,7 @@ class AdminUserUpdateForm(forms.ModelForm):
         can_manage_letterheads = bool(self.cleaned_data.get("can_manage_letterheads"))
         can_manage_users = bool(self.cleaned_data.get("can_manage_users"))
         can_assign_bookings = bool(self.cleaned_data.get("can_assign_bookings"))
-        user.is_active = bool(self.cleaned_data.get("is_active", True))
+        user.is_active = bool(self.cleaned_data.get("is_active", True)) if not self.fields["is_active"].disabled else self.instance.is_active
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
 
         if commit:
@@ -569,6 +608,16 @@ class AdminUserUpdateForm(forms.ModelForm):
                 desired_groups = [g for g in desired_groups if g.pk != staff_group.pk]
 
             user.groups.set(desired_groups)
+            # A superuser can reactivate a locked account; assigning the Admin
+            # role also restores the account as requested.
+            if any(group.name == "Admin" for group in desired_groups):
+                user.is_active = True
+            if user.is_active and not originally_active:
+                profile, _ = UserProfile.objects.get_or_create(user=user)
+                profile.failed_login_attempts = 0
+                profile.locked_at = None
+                profile.save(update_fields=["failed_login_attempts", "locked_at"])
+            user.save(update_fields=["is_active"])
             selected_permissions = list(self.cleaned_data.get("permissions") or [])
             selected_permissions.extend(_master_permissions_for_keys(master_access))
             if can_delete_bookings:

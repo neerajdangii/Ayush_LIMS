@@ -39,6 +39,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Compress eligible dynamic responses of at least 200 bytes when the
+    # client advertises gzip in Accept-Encoding.  It leaves already encoded
+    # responses (including WhiteNoise's pre-compressed static assets) alone.
+    'django.middleware.gzip.GZipMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -104,6 +108,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {'NAME': 'accounts.password_validators.MaximumPasswordLengthValidator'},
 ]
 
 LANGUAGE_CODE = 'en-us'
@@ -134,7 +139,9 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS
 SECURE_HSTS_PRELOAD = env_bool('DJANGO_SECURE_HSTS_PRELOAD', 'False')
 SECURE_BROWSER_XSS_FILTER = env_bool('DJANGO_SECURE_BROWSER_XSS_FILTER', 'True')
 SECURE_CONTENT_TYPE_NOSNIFF = env_bool('DJANGO_SECURE_CONTENT_TYPE_NOSNIFF', 'True')
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if env_bool('DJANGO_SECURE_PROXY_SSL_HEADER', 'True') else None
+# Enable this only behind a proxy that strips client-supplied X-Forwarded-Proto
+# and sets its own trusted value. Direct Gunicorn deployments must leave it off.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if env_bool('DJANGO_SECURE_PROXY_SSL_HEADER', 'False') else None
 X_FRAME_OPTIONS = os.getenv('DJANGO_X_FRAME_OPTIONS', 'DENY').strip() or 'DENY'
 
 if not DEBUG:
@@ -149,6 +156,15 @@ SECURE_CROSS_ORIGIN_OPENER_POLICY = (
     ).strip()
     or None
 )
+
+# Protect Gunicorn workers from an overloaded or failing LibreOffice preview
+# converter. The circuit opens after repeated failures and automatically probes
+# again after the recovery period.
+DOCUMENT_CONVERTER_TIMEOUT_SECONDS = int(os.getenv('DOCUMENT_CONVERTER_TIMEOUT_SECONDS', '20'))
+DOCUMENT_CONVERTER_FAILURE_THRESHOLD = int(os.getenv('DOCUMENT_CONVERTER_FAILURE_THRESHOLD', '3'))
+DOCUMENT_CONVERTER_RECOVERY_SECONDS = int(os.getenv('DOCUMENT_CONVERTER_RECOVERY_SECONDS', '60'))
+DOCUMENT_CONVERTER_MAX_CONCURRENT = int(os.getenv('DOCUMENT_CONVERTER_MAX_CONCURRENT', '1'))
+DOCUMENT_CONVERTER_LOCK_PATH = os.getenv('DOCUMENT_CONVERTER_LOCK_PATH', '/tmp/arl-document-converter.lock')
 
 LOGGING = {
     'version': 1,

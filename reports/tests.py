@@ -6,6 +6,7 @@ from django.test import RequestFactory, SimpleTestCase
 from bookings.models import Booking
 
 from .models import TDSDocumentTemplate
+from .dependencies import CircuitBreaker, DependencyUnavailable
 from .views import _render_tds_content, _render_tds_source_file, _split_tds_rendered_pages
 
 
@@ -119,3 +120,14 @@ class TDSRenderingSafetyTests(SimpleTestCase):
 
         self.assertIn('class="coa-letterhead-image coa-letterhead-image--full"', rendered)
         self.assertNotIn("background-image:url(", rendered)
+
+
+class DependencyCircuitBreakerTests(SimpleTestCase):
+    def test_open_circuit_fast_fails_after_a_dependency_failure(self):
+        breaker = CircuitBreaker(failure_threshold=1, recovery_seconds=60, max_concurrent=1)
+
+        with self.assertRaises(DependencyUnavailable):
+            breaker.call(lambda: (_ for _ in ()).throw(OSError("converter unavailable")))
+
+        with self.assertRaises(DependencyUnavailable):
+            breaker.call(lambda: "this operation must not run while the circuit is open")

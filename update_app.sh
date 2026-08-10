@@ -39,6 +39,9 @@ $COMPOSE_CMD ps
 echo "Django deployment check:"
 $COMPOSE_CMD exec -T web python manage.py check --deploy || true
 
+echo "Active CSRF deployment settings:"
+$COMPOSE_CMD exec -T web python manage.py shell -c "from django.conf import settings; print('DEBUG=', settings.DEBUG); print('ALLOWED_HOSTS=', settings.ALLOWED_HOSTS); print('CSRF_TRUSTED_ORIGINS=', settings.CSRF_TRUSTED_ORIGINS); print('CSRF_COOKIE_SECURE=', settings.CSRF_COOKIE_SECURE); print('SECURE_PROXY_SSL_HEADER=', settings.SECURE_PROXY_SSL_HEADER)"
+
 echo "TDS migration status:"
 $COMPOSE_CMD exec -T web python manage.py showmigrations reports | grep 0009_tdsdocumenttemplate || true
 

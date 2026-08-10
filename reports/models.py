@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import shutil
-import subprocess
 import tempfile
 
 from django.conf import settings
@@ -12,6 +11,7 @@ from django.utils.html import escape
 
 from bookings.models import Booking, ProtocolMaster, SampleNameMaster, TestMaster
 from .template_library import build_tests_without_templates_table
+from .dependencies import DependencyUnavailable, run_document_conversion
 
 
 class ReportRemark(models.Model):
@@ -228,20 +228,20 @@ class TDSDocumentTemplate(models.Model):
             finally:
                 self.source_file.close()
 
-            result = subprocess.run(
-                [
-                    converter,
-                    "--headless",
-                    "--convert-to",
-                    "pdf",
-                    "--outdir",
-                    tmp_dir,
-                    str(input_path),
-                ],
-                check=False,
-                capture_output=True,
-                timeout=60,
-            )
+            try:
+                result = run_document_conversion(
+                    [
+                        converter,
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        tmp_dir,
+                        str(input_path),
+                    ]
+                )
+            except DependencyUnavailable as exc:
+                return False, str(exc)
             if result.returncode != 0 or not output_path.exists():
                 detail = (result.stderr or result.stdout or b"").decode("utf-8", errors="ignore").strip()
                 return False, detail or "Word preview PDF could not be generated."

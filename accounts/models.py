@@ -15,6 +15,8 @@ class UserProfile(models.Model):
         related_name="profile",
     )
     signature_file = models.FileField(upload_to="signatures/", blank=True, null=True)
+    failed_login_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self) -> str:
         return f"Profile: {self.user.username}"

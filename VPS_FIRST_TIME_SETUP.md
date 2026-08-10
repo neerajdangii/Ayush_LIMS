@@ -44,10 +44,12 @@ Use values like these:
 DJANGO_SECRET_KEY=put-a-long-random-secret-here
 DJANGO_DEBUG=False
 DJANGO_ALLOWED_HOSTS=your-vps-ip
+# Must exactly match the URL used in the browser (include :8000 for direct Gunicorn).
 DJANGO_CSRF_TRUSTED_ORIGINS=http://your-vps-ip:8000
 DJANGO_TIME_ZONE=Asia/Kolkata
 DJANGO_USE_POSTGRES=True
-DJANGO_SECURE_PROXY_SSL_HEADER=True
+# False for this direct-Gunicorn setup. Set True only behind a trusted HTTPS proxy.
+DJANGO_SECURE_PROXY_SSL_HEADER=False
 DJANGO_SECURE_SSL_REDIRECT=False
 DJANGO_SESSION_COOKIE_SECURE=False
 DJANGO_CSRF_COOKIE_SECURE=False
@@ -101,3 +103,27 @@ http://your-vps-ip:8000/accounts/login/
 ```
 
 Log in using the superuser you created.
+
+## CSRF troubleshooting
+
+Use one canonical browser URL for the application. Do not switch between the
+VPS IP address, a hostname, and a domain in the same browser session. Set
+`DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS` to that exact public
+host/origin, then rebuild the web container. For example:
+
+```env
+# Direct Gunicorn
+DJANGO_ALLOWED_HOSTS=203.0.113.10
+DJANGO_CSRF_TRUSTED_ORIGINS=http://203.0.113.10:8000
+
+# HTTPS domain behind a reverse proxy
+DJANGO_ALLOWED_HOSTS=lims.example.com
+DJANGO_CSRF_TRUSTED_ORIGINS=https://lims.example.com
+DJANGO_SECURE_PROXY_SSL_HEADER=True
+DJANGO_SESSION_COOKIE_SECURE=True
+DJANGO_CSRF_COOKIE_SECURE=True
+```
+
+After changing these settings, delete the site's cookies (or use a private
+window) and reload the login page before submitting any form. Keep
+`DJANGO_DEBUG=False` on the live server so diagnostic details are not exposed.

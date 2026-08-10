@@ -92,6 +92,7 @@
                 <button class="btn btn-sm btn-success" type="submit">Assign</button>
               </form>
               <a class="d-none" id="bookingReportLink" href="{% url 'reports:approval' booking.pk %}">Report</a>
+              <div class="alert alert-danger d-none py-1 px-2 mb-0 small" id="bookingAssignError" role="alert"></div>
               {% endif %}
             {% endif %}
           </div>
@@ -206,6 +207,7 @@
     const assignForm = document.getElementById('bookingAssignForm');
     const reportLink = document.getElementById('bookingReportLink');
     const statusBadge = document.getElementById('bookingStatusBadge');
+    const errorBox = document.getElementById('bookingAssignError');
 
     if (!assignForm || !reportLink) {
       return;
@@ -219,42 +221,62 @@
         return;
       }
 
+      const previous = {
+        assigned: assignForm.dataset.assigned,
+        buttonText: submitButton ? submitButton.textContent : '',
+        buttonClass: submitButton ? submitButton.className : '',
+        statusText: statusBadge ? statusBadge.textContent : '',
+        statusClass: statusBadge ? statusBadge.className : '',
+      };
+      // Show the intended state immediately; the button stays disabled until
+      // the server confirms it, so a report cannot be opened prematurely.
+      assignForm.dataset.assigned = 'pending';
+      if (errorBox) errorBox.classList.add('d-none');
       if (submitButton) {
         submitButton.disabled = true;
-        submitButton.textContent = 'Assigning...';
-      }
-
-      const response = await fetch(assignForm.action, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': assignForm.querySelector('[name=csrfmiddlewaretoken]').value,
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-      });
-
-      if (!response.ok) {
-        if (submitButton) {
-          submitButton.disabled = false;
-          submitButton.textContent = 'Assign';
-        }
-        return;
-      }
-
-      const data = await response.json();
-      if (data.report_url) {
-        reportLink.href = data.report_url;
-      }
-      assignForm.dataset.assigned = 'true';
-      if (submitButton) {
-        submitButton.disabled = false;
         submitButton.classList.remove('btn-success');
         submitButton.classList.add('btn-primary');
-        submitButton.textContent = 'Report';
+        submitButton.textContent = 'Assigned — saving...';
       }
       if (statusBadge) {
         statusBadge.classList.remove('text-bg-warning');
         statusBadge.classList.add('text-bg-primary');
         statusBadge.textContent = 'Assigned';
+      }
+
+      try {
+        const response = await fetch(assignForm.action, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': assignForm.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+        });
+        if (!response.ok) throw new Error('The server could not assign this booking.');
+        const data = await response.json();
+        if (!data.assigned) throw new Error(data.detail || 'The server could not assign this booking.');
+        if (data.report_url) reportLink.href = data.report_url;
+        assignForm.dataset.assigned = 'true';
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Report';
+        }
+      } catch (error) {
+        assignForm.dataset.assigned = previous.assigned;
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.className = previous.buttonClass;
+          submitButton.textContent = previous.buttonText;
+        }
+        if (statusBadge) {
+          statusBadge.className = previous.statusClass;
+          statusBadge.textContent = previous.statusText;
+        }
+        if (errorBox) {
+          errorBox.textContent = `${error.message} The screen was restored; please try again.`;
+          errorBox.classList.remove('d-none');
+        }
+        return;
       }
     });
   });
