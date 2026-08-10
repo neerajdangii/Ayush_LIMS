@@ -149,17 +149,23 @@ class Booking(models.Model):
     remarks = models.TextField(blank=True)
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="bookings")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="bookings",
+        null=True,
+        blank=True,
+    )
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="updated_bookings",
         null=True,
         blank=True,
     )
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="approved_bookings",
         null=True,
         blank=True,
@@ -371,8 +377,10 @@ class BillingRecord(models.Model):
     )
     confirmed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="confirmed_billings",
+        null=True,
+        blank=True,
     )
     confirmed_at = models.DateTimeField(default=timezone.now)
     bill_number = models.CharField(max_length=100)
@@ -396,9 +404,21 @@ class BillingUndoRecord(models.Model):
     letter_date = models.DateField(null=True, blank=True)
     billing_done_date = models.DateField(null=True, blank=True)
     confirmed_at = models.DateTimeField()
-    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="confirmed_billing_undo_records")
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="confirmed_billing_undo_records",
+        null=True,
+        blank=True,
+    )
     undone_at = models.DateTimeField(default=timezone.now)
-    undone_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="undone_billing_records")
+    undone_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="undone_billing_records",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ["-undone_at", "-pk"]

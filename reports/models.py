@@ -280,7 +280,7 @@ class Report(models.Model):
 
     manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="managed_reports",
         null=True,
         blank=True,
@@ -291,7 +291,7 @@ class Report(models.Model):
 
     incharge = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="incharge_reports",
         null=True,
         blank=True,
@@ -323,14 +323,14 @@ class Report(models.Model):
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="reports",
         null=True,
         blank=True,
     )
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="updated_reports",
         null=True,
         blank=True,

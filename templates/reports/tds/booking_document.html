@@ -99,6 +99,18 @@
     color: #000;
   }
   .tds-template-content p:empty { display: none !important; }
+  /* Keep newly inserted master tables readable. These are defaults only, so
+     a border, width, padding, or alignment chosen in TinyMCE still wins. */
+  .tds-template-content table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  .tds-template-content th,
+  .tds-template-content td {
+    border: 1px solid #000;
+    padding: 2px 3px;
+    vertical-align: top;
+  }
   .tds-source-frame {
     width: 100%;
     min-height: 280mm;
@@ -1161,7 +1173,11 @@
     .tds-ads-print-page {
       display: flex !important;
       flex-direction: column;
+      height: 279mm;
+      min-height: 279mm;
       margin: 0 !important;
+      padding: 7mm;
+      position: relative;
       break-inside: avoid;
       page-break-inside: avoid;
     }
@@ -1171,8 +1187,16 @@
     }
     .tds-ads-page-body {
       overflow: visible;
+      padding-bottom: 16mm;
       page-break-inside: auto;
       break-inside: auto !important;
+    }
+    .tds-ads-page-footer {
+      bottom: 7mm;
+      left: 7mm;
+      margin: 0 !important;
+      position: absolute;
+      right: 7mm;
     }
     .tds-ads-print-page .tds-template-content {
       page-break-inside: auto !important;
@@ -1422,10 +1446,10 @@
             {% else %}
             <div class="tds-template-content tds-ads-page-content">{{ page.content|strip_hfb|safe }}</div>
             {% endif %}
-            {% if page.footer %}
-            <div class="tds-template-content tds-ads-page-footer">{{ page.footer|safe }}</div>
-            {% endif %}
           </div>
+          {% if page.footer %}
+          <div class="tds-template-content tds-ads-page-footer">{{ page.footer|safe }}</div>
+          {% endif %}
         </section>
         {% empty %}
         <div class="alert alert-info mb-0">
