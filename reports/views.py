@@ -38,6 +38,33 @@ PUBLIC_REPORT_ALLOWED_STATUSES = {
 
 logger = logging.getLogger(__name__)
 
+
+class _TDSSampleName:
+    """Expose a sample master to TDS while keeping its rendered name unambiguous."""
+
+    def __init__(self, sample):
+        self._sample = sample
+
+    def __getattr__(self, name):
+        return getattr(self._sample, name)
+
+    def __str__(self):
+        return (self._sample.name or "").strip()
+
+
+class _TDSBooking:
+    """Booking proxy used only by editable TDS templates."""
+
+    def __init__(self, booking):
+        self._booking = booking
+
+    def __getattr__(self, name):
+        value = getattr(self._booking, name)
+        if name == "sample_name" and value is not None:
+            return _TDSSampleName(value)
+        return value
+
+
 def _format_report_date(value, include_time=False, month_year_only=False):
     if not value:
         return "N.S."
@@ -125,7 +152,9 @@ def _booking_template_context(booking, request):
     sample_name = booking.sample_name.name if booking.sample_name_id else ""
     batch_no = booking.batch_no or ""
     return {
-        "booking": booking,
+        # `{{ booking.sample_name }}` should print the master name, not the
+        # Finished Good display string that also includes generic-name text.
+        "booking": _TDSBooking(booking),
         "sample_name": sample_name,
         "sample_display_name": sample_name,
         "sample_type": booking.sample_type,

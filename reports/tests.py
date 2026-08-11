@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase
 
-from bookings.models import Booking
+from bookings.models import Booking, SampleNameMaster
 
 from .models import TDSDocumentTemplate
 from .dependencies import CircuitBreaker, DependencyUnavailable
@@ -107,6 +107,19 @@ class TDSRenderingSafetyTests(SimpleTestCase):
         rendered = _fill_tds_trf_row_value(content, "Product Name", "Finished Product", first_only=True)
 
         self.assertEqual(rendered.count("Finished Product"), 1)
+
+    def test_tds_booking_sample_name_uses_one_master_name_for_finished_goods(self):
+        sample = SampleNameMaster(name="Finished Product", generic_name="Finished Product")
+        booking = Booking(sample_name=sample)
+
+        rendered = _render_tds_content(
+            "<p>{{ booking.sample_name }}</p>",
+            booking,
+            self.request,
+            TDSDocumentTemplate.DocumentType.CS,
+        )
+
+        self.assertEqual(rendered, "<p>Finished Product</p>")
 
     def test_full_letterhead_renders_as_img_elements_for_print_stability(self):
         letterhead = SimpleNamespace(
