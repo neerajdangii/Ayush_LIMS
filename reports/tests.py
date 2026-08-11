@@ -1,8 +1,12 @@
+from datetime import datetime
 from types import SimpleNamespace
 
+from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
-from django.test import RequestFactory, SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.utils import timezone
 
+from accounts.models import SystemSetting
 from bookings.models import Booking, SampleNameMaster
 
 from .models import TDSDocumentTemplate
@@ -155,6 +159,33 @@ class TDSRenderingSafetyTests(SimpleTestCase):
 
         self.assertIn('class="coa-letterhead-image coa-letterhead-image--full"', rendered)
         self.assertNotIn("background-image:url(", rendered)
+
+
+class CertificateNumberingTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="certificate-test-user", password="safe-password")
+        settings = SystemSetting.current()
+        settings.certificate_numbering_mode = SystemSetting.CertificateNumberingMode.DAILY
+        settings.save(update_fields=["certificate_numbering_mode", "updated_at"])
+
+    def test_later_booking_on_the_same_received_date_continues_the_serial(self):
+        first_receipt = timezone.make_aware(datetime(2026, 8, 10, 9, 0))
+        later_receipt = timezone.make_aware(datetime(2026, 8, 10, 15, 0))
+
+        for _ in range(10):
+            Booking.objects.create(
+                created_by=self.user,
+                booking_type=Booking.BookingType.REGULATORY,
+                sample_receipt_date=first_receipt,
+            )
+
+        next_booking = Booking.objects.create(
+            created_by=self.user,
+            booking_type=Booking.BookingType.REGULATORY,
+            sample_receipt_date=later_receipt,
+        )
+
+        self.assertEqual(next_booking.certificate_no, "ARL/REG/260810011")
 
 
 class DependencyCircuitBreakerTests(SimpleTestCase):

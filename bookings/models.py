@@ -305,19 +305,18 @@ class Booking(models.Model):
         ).order_by("-created_at").first()
 
     def save(self, *args, **kwargs):
-        is_new = self._state.adding
         if not self.tracking_code:
             self.tracking_code = self.generate_tracking_code()
         if self.sample_reg_no:
             super().save(*args, **kwargs)
-            self._assign_certificate_serial_if_needed(is_new)
+            self._assign_certificate_serial_if_needed()
             return
 
         for _ in range(3):
             self.sample_reg_no = self.generate_sample_reg_no()
             try:
                 super().save(*args, **kwargs)
-                self._assign_certificate_serial_if_needed(is_new)
+                self._assign_certificate_serial_if_needed()
                 return
             except IntegrityError:
                 self.sample_reg_no = None
@@ -325,12 +324,19 @@ class Booking(models.Model):
                 continue
         raise IntegrityError("Unable to generate unique sample registration number.")
 
-    def _assign_certificate_serial_if_needed(self, is_new):
-        """Assign a serial once; later report/date edits must never renumber it."""
-        if not is_new or self.certificate_serial or not self.pk:
+    def _assign_certificate_serial_if_needed(self):
+        """Assign the daily serial when the received date is first available."""
+        if self.certificate_serial or not self.pk:
             return
 
-        self.certificate_serial = self._calculate_certificate_serial(self._certificate_numbering_mode())
+        numbering_mode = self._certificate_numbering_mode()
+        # A daily certificate must be sequenced against its received date. A
+        # booking may be created before that date is entered, so wait instead
+        # of reserving a serial from the unrelated booking date.
+        if numbering_mode != "continuous" and not self.sample_receipt_date:
+            return
+
+        self.certificate_serial = self._calculate_certificate_serial(numbering_mode)
         type(self).objects.filter(pk=self.pk).update(certificate_serial=self.certificate_serial)
 
     def approve(self, user):
