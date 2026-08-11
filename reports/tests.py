@@ -190,6 +190,27 @@ class CertificateNumberingTests(TestCase):
 
         self.assertEqual(next_booking.certificate_no, "ARL/REG/260810011")
 
+    def test_changing_received_date_uses_the_next_serial_for_the_new_date(self):
+        receipt_10 = timezone.make_aware(datetime(2026, 8, 10, 9, 0))
+        receipt_11 = timezone.make_aware(datetime(2026, 8, 11, 9, 0))
+        for _ in range(10):
+            Booking.objects.create(
+                created_by=self.user,
+                booking_type=Booking.BookingType.REGULATORY,
+                sample_receipt_date=receipt_11,
+            )
+
+        booking = Booking.objects.create(
+            created_by=self.user,
+            booking_type=Booking.BookingType.REGULATORY,
+            sample_receipt_date=receipt_10,
+        )
+        booking.sample_receipt_date = receipt_11
+        booking.save(update_fields=["sample_receipt_date", "updated_at"])
+        booking.refresh_from_db()
+
+        self.assertEqual(booking.certificate_no, "ARL/REG/260811011")
+
 
 class DependencyCircuitBreakerTests(SimpleTestCase):
     def test_open_circuit_fast_fails_after_a_dependency_failure(self):
