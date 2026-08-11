@@ -1819,6 +1819,14 @@ class ReportCreateOrUpdateView(PermissionRequiredMixin, RoleRequiredMixin, Updat
     form_class = ReportApprovalForm
     template_name = "reports/report_approval.html"
 
+    def has_permission(self):
+        # Assign Bookings grants access only to the booking-assignment/report
+        # workflow, not general report editing elsewhere in the application.
+        return self.request.user.has_perm("bookings.assign_booking") or super().has_permission()
+
+    def test_func(self):
+        return self.request.user.has_perm("bookings.assign_booking") or super().test_func()
+
     def get_object(self, queryset=None):
         booking = get_object_or_404(Booking, pk=self.kwargs["booking_pk"])
         if booking.status != Booking.Status.APPROVED:
@@ -1848,8 +1856,12 @@ class ReportCreateOrUpdateView(PermissionRequiredMixin, RoleRequiredMixin, Updat
         return context
 
     def form_valid(self, form):
-        if not (self.request.user.is_superuser or has_role(self.request.user, "Checked By")):
-            messages.error(self.request, "Only Checked By can approve report workflow.")
+        if not (
+            self.request.user.is_superuser
+            or has_role(self.request.user, "Checked By")
+            or self.request.user.has_perm("bookings.assign_booking")
+        ):
+            messages.error(self.request, "You need Checked By or Assign Bookings access to approve the report workflow.")
             return self.form_invalid(form)
 
         report = form.save(commit=False)
