@@ -209,6 +209,10 @@ class LoginForm(AuthenticationForm):
             user = user_model.objects.select_for_update().filter(username=username).first()
             if not user or not user.is_active or user.check_password(password):
                 return
+            # Never lock the accounts that administer the system. They must
+            # remain available to recover locked ordinary user accounts.
+            if user.is_superuser or user.groups.filter(name="Admin").exists():
+                return
             profile, _ = UserProfile.objects.select_for_update().get_or_create(user=user)
             profile.failed_login_attempts += 1
             update_fields = ["failed_login_attempts"]
@@ -543,6 +547,10 @@ class AdminUserUpdateForm(forms.ModelForm):
             self.fields["can_assign_bookings"].initial = self.instance.user_permissions.filter(
                 content_type__app_label="bookings", codename="assign_booking"
             ).exists()
+            if self.instance.is_superuser or self.instance.groups.filter(name="Admin").exists():
+                self.fields["is_active"].initial = True
+                self.fields["is_active"].disabled = True
+                self.fields["is_active"].help_text = "Superuser and Admin accounts must remain active."
         if not (grantor and grantor.is_superuser):
             self.fields["is_active"].disabled = True
 
@@ -566,7 +574,18 @@ class AdminUserUpdateForm(forms.ModelForm):
         can_manage_letterheads = bool(self.cleaned_data.get("can_manage_letterheads"))
         can_manage_users = bool(self.cleaned_data.get("can_manage_users"))
         can_assign_bookings = bool(self.cleaned_data.get("can_assign_bookings"))
-        user.is_active = bool(self.cleaned_data.get("is_active", True)) if not self.fields["is_active"].disabled else self.instance.is_active
+        protected_existing_account = bool(
+            self.instance.is_superuser or self.instance.groups.filter(name="Admin").exists()
+        )
+        user.is_active = (
+            True
+            if protected_existing_account
+            else (
+                bool(self.cleaned_data.get("is_active", True))
+                if not self.fields["is_active"].disabled
+                else self.instance.is_active
+            )
+        )
         user.is_staff = bool(self.cleaned_data.get("is_staff", False)) or checked_by or person_incharge
 
         if commit:
@@ -608,9 +627,9 @@ class AdminUserUpdateForm(forms.ModelForm):
                 desired_groups = [g for g in desired_groups if g.pk != staff_group.pk]
 
             user.groups.set(desired_groups)
-            # A superuser can reactivate a locked account; assigning the Admin
-            # role also restores the account as requested.
-            if any(group.name == "Admin" for group in desired_groups):
+            # Superusers and Admin-role users must always be active. Assigning
+            # Admin therefore also restores a previously inactive account.
+            if user.is_superuser or any(group.name == "Admin" for group in desired_groups):
                 user.is_active = True
             if user.is_active and not originally_active:
                 profile, _ = UserProfile.objects.get_or_create(user=user)
