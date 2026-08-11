@@ -152,6 +152,8 @@ def _booking_template_context(booking, request):
         "sample_receipt_date": _format_report_date(booking.sample_receipt_date),
         "booking_date": _format_report_date(booking.booking_date),
         "letter_date": _format_report_date(booking.letter_date),
+        "analysis_start_date": _format_report_date(booking.analysis_start_date),
+        "analysis_end_date": _format_report_date(booking.analysis_end_date),
         "manufacture_date": _format_report_date(booking.manufacture_date, month_year_only=True),
         "expiry_retest_date": _format_report_date(booking.expiry_retest_date, month_year_only=True),
         "license_no": booking.license_no,
@@ -175,6 +177,9 @@ def _render_tds_content(content, booking, request, document_type=None, inject_bo
         return rendered_content
     rendered_content = _strip_tds_trailing_empty_blocks(rendered_content)
     rendered_content = _unwrap_tds_outer_table(rendered_content)
+    # Fill only blank date fields. This keeps every other master field under
+    # the author's control while making new-booking date values consistent.
+    rendered_content = _fill_tds_blank_date_fields(rendered_content, booking)
     if document_type in {TDSDocumentTemplate.DocumentType.AC, TDSDocumentTemplate.DocumentType.CHECKLIST}:
         rendered_content = _clean_tds_legacy_footer(rendered_content)
     id_based_documents = {
@@ -206,6 +211,13 @@ def _render_tds_content(content, booking, request, document_type=None, inject_bo
             ("Tests", test_names),
         ):
             rendered_content = _fill_tds_trf_row_value(rendered_content, label, value)
+        # Finished-good sample masters can have a generic name too. The TRF
+        # Product Name cell must show the selected product once, not a
+        # repeated display-name expansion.
+        product_name = booking.sample_name.name if booking.sample_name_id else ""
+        rendered_content = _fill_tds_trf_row_value(
+            rendered_content, "Product Name", product_name, first_only=True
+        )
         rendered_content = re.sub(r"(?:&nbsp;|&#160;|\xa0){3,}", " ", rendered_content, flags=re.IGNORECASE)
         rendered_content = (
             '<div class="tds-trf-document">'
@@ -1296,7 +1308,27 @@ def _fill_tds_booking_labels(content, booking):
     return content
 
 
-def _fill_tds_trf_row_value(content, label, value):
+def _fill_tds_blank_date_fields(content, booking):
+    """Put N.S. in an empty, labelled TDS date cell and leave all other data alone."""
+    for label, value in (
+        ("Sample Receipt Date", _format_report_date(booking.sample_receipt_date)),
+        ("Sample Received On", _format_report_date(booking.sample_receipt_date)),
+        ("Booking Date", _format_report_date(booking.booking_date)),
+        ("Letter Date", _format_report_date(booking.letter_date)),
+        ("Analysis started on", _format_report_date(booking.analysis_start_date)),
+        ("Date of Testing", _format_report_date(booking.analysis_start_date)),
+        ("Analysis completed on", _format_report_date(booking.analysis_end_date)),
+        ("Date of Completion", _format_report_date(booking.analysis_end_date)),
+        ("Mfg. Date", _format_report_date(booking.manufacture_date, month_year_only=True)),
+        ("Date of Mfg.", _format_report_date(booking.manufacture_date, month_year_only=True)),
+        ("Exp. date", _format_report_date(booking.expiry_retest_date, month_year_only=True)),
+        ("Date of Exp.", _format_report_date(booking.expiry_retest_date, month_year_only=True)),
+    ):
+        content = _fill_next_empty_tds_cell(content, label, value)
+    return content
+
+
+def _fill_tds_trf_row_value(content, label, value, *, first_only=False):
     """Replace the value cell beside an exact label in the TRF template."""
     row_re = re.compile(r"<tr\b[^>]*>.*?</tr>", flags=re.IGNORECASE | re.DOTALL)
     cell_re = re.compile(
@@ -1309,9 +1341,13 @@ def _fill_tds_trf_row_value(content, label, value):
         return re.sub(r"[\s:.]+$", "", text).casefold()
 
     expected_label = normalize_label(label)
+    replaced = False
 
     def replace_row(match):
+        nonlocal replaced
         row_html = match.group(0)
+        if first_only and replaced:
+            return row_html
         cells = list(cell_re.finditer(row_html))
         for index, cell in enumerate(cells[:-1]):
             if normalize_label(cell.group(0)) != expected_label:
@@ -1320,6 +1356,7 @@ def _fill_tds_trf_row_value(content, label, value):
             tag = value_cell.group("tag")
             attrs = value_cell.group("attrs") or ""
             replacement = f"<{tag}{attrs}>{escape(value or '')}</{tag}>"
+            replaced = True
             return row_html[: value_cell.start()] + replacement + row_html[value_cell.end() :]
         return row_html
 

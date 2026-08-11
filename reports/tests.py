@@ -7,7 +7,7 @@ from bookings.models import Booking
 
 from .models import TDSDocumentTemplate
 from .dependencies import CircuitBreaker, DependencyUnavailable
-from .views import _render_tds_content, _render_tds_source_file, _split_tds_rendered_pages
+from .views import _fill_tds_trf_row_value, _render_tds_content, _render_tds_source_file, _split_tds_rendered_pages
 
 
 class TDSRenderingSafetyTests(SimpleTestCase):
@@ -85,6 +85,28 @@ class TDSRenderingSafetyTests(SimpleTestCase):
         rendered = _render_tds_content("", booking, req, TDSDocumentTemplate.DocumentType.AC)
 
         self.assertIn("CHECKLIST FOR ANALYTICAL DATA REVIEW", rendered)
+
+    def test_blank_tds_dates_render_as_not_specified(self):
+        content = (
+            "<table><tr><td>Analysis completed on</td><td></td></tr></table>"
+            "<p>{{ analysis_start_date }}</p>"
+        )
+
+        rendered = _render_tds_content(
+            content, self.booking, self.request, TDSDocumentTemplate.DocumentType.CS
+        )
+
+        self.assertEqual(rendered.count("N.S."), 2)
+
+    def test_trf_product_name_fills_only_the_first_matching_row(self):
+        content = (
+            "<table><tr><td>Product Name</td><td></td></tr>"
+            "<tr><td>Product Name</td><td></td></tr></table>"
+        )
+
+        rendered = _fill_tds_trf_row_value(content, "Product Name", "Finished Product", first_only=True)
+
+        self.assertEqual(rendered.count("Finished Product"), 1)
 
     def test_full_letterhead_renders_as_img_elements_for_print_stability(self):
         letterhead = SimpleNamespace(
