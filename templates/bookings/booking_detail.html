@@ -77,7 +77,7 @@
             <a class="btn btn-sm tds-doc-btn tds-doc-btn--trf" href="{% url 'reports:booking_tds_document' booking.pk 'trf' %}?print=1" target="_blank" rel="noopener">TRF</a>
             <a class="btn btn-sm tds-doc-btn tds-doc-btn--job" href="{% url 'reports:booking_tds_document' booking.pk 'job_order' %}?print=1" target="_blank" rel="noopener">Print Job Order</a>
             {% if booking.status == 'approved' %}
-              {% if user|has_role:"Checked By" or perms.bookings.assign_booking %}
+              {% if user|has_role:"Checked By" %}
               <a class="btn btn-sm btn-primary" href="{% url 'reports:approval' booking.pk %}">Report</a>
               {% endif %}
               {% if report %}

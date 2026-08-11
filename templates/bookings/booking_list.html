@@ -115,7 +115,7 @@
               {% if perms.bookings.delete_booking %}
               <a class="btn btn-sm btn-outline-danger" href="{% url 'bookings:delete' b.pk %}">Delete</a>
               {% endif %}
-              {% if user|has_role:"Checked By" or perms.bookings.assign_booking %}
+              {% if user|has_role:"Checked By" %}
               <a class="btn btn-sm btn-primary" href="{% url 'reports:approval' b.pk %}">Report</a>
               {% endif %}
             </td>
