@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, models
-from django.db.models import Max, Q
+from django.db.models import Max
 from django.db.models.functions import Cast
 from django.utils import timezone
 
@@ -235,12 +235,16 @@ class Booking(models.Model):
             receipt_date = timezone.localtime(receipt_date)
 
         date_field = "sample_receipt_date" if self.sample_receipt_date else "booking_date"
-        return Booking.objects.filter(
-            **{f"{date_field}__date": receipt_date.date()},
-        ).filter(
-            Q(**{f"{date_field}__lt": receipt_date})
-            | Q(**{date_field: receipt_date, "pk__lte": self.pk})
-        ).count()
+        # The serial is per calendar day, not per timestamp. A booking entered
+        # later can legitimately have an earlier clock time on its received
+        # date; use that day's highest assigned serial so it always continues.
+        last_serial = (
+            Booking.objects.filter(**{f"{date_field}__date": receipt_date.date()})
+            .exclude(pk=self.pk)
+            .aggregate(max_serial=Max("certificate_serial"))
+            .get("max_serial")
+        )
+        return (last_serial or 0) + 1
 
     @property
     def sample_registration_no(self) -> str:
