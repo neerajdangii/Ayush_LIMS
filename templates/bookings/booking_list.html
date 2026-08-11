@@ -60,6 +60,7 @@
           <tr>
             <th class="text-center" style="width: 42px;">{% if perms.bookings.delete_booking %}<input class="form-check-input" type="checkbox" id="selectAllBookings" aria-label="Select all bookings">{% endif %}</th>
             <th>Sample Reg No</th>
+            <th>Certificate No</th>
             <th>Booking ID</th>
             <th>Booking Date</th>
             <th>Booked By</th>
@@ -80,6 +81,7 @@
               <div class="text-muted small">Batch: {{ b.batch_no }}</div>
               {% endif %}
             </td>
+            <td>{{ b.certificate_no }}</td>
             <td><span class="tracking-chip">{{ b.tracking_code }}</span></td>
             <td>{{ b.booking_date|date:"d/m/Y" }}</td>
             <td>
@@ -119,7 +121,7 @@
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="10" class="text-center">No bookings found.</td></tr>
+          <tr><td colspan="11" class="text-center">No bookings found.</td></tr>
           {% endfor %}
         </tbody>
       </table>

@@ -246,6 +246,14 @@ class Booking(models.Model):
         )
         return (last_serial or 0) + 1
 
+    @staticmethod
+    def _certificate_calendar_date(value):
+        if not value:
+            return None
+        if hasattr(value, "tzinfo") and timezone.is_aware(value):
+            value = timezone.localtime(value)
+        return value.date() if hasattr(value, "date") else value
+
     @property
     def sample_registration_no(self) -> str:
         source_date = self.sample_receipt_date or self.booking_date
@@ -309,18 +317,27 @@ class Booking(models.Model):
         ).order_by("-created_at").first()
 
     def save(self, *args, **kwargs):
+        previous_receipt_date = None
+        if self.pk:
+            previous_receipt_date = type(self).objects.filter(pk=self.pk).values_list(
+                "sample_receipt_date", flat=True
+            ).first()
+        receipt_date_changed = (
+            self._certificate_calendar_date(previous_receipt_date)
+            != self._certificate_calendar_date(self.sample_receipt_date)
+        )
         if not self.tracking_code:
             self.tracking_code = self.generate_tracking_code()
         if self.sample_reg_no:
             super().save(*args, **kwargs)
-            self._assign_certificate_serial_if_needed()
+            self._assign_certificate_serial_if_needed(receipt_date_changed=receipt_date_changed)
             return
 
         for _ in range(3):
             self.sample_reg_no = self.generate_sample_reg_no()
             try:
                 super().save(*args, **kwargs)
-                self._assign_certificate_serial_if_needed()
+                self._assign_certificate_serial_if_needed(receipt_date_changed=receipt_date_changed)
                 return
             except IntegrityError:
                 self.sample_reg_no = None
@@ -328,12 +345,16 @@ class Booking(models.Model):
                 continue
         raise IntegrityError("Unable to generate unique sample registration number.")
 
-    def _assign_certificate_serial_if_needed(self):
-        """Assign the daily serial when the received date is first available."""
-        if self.certificate_serial or not self.pk:
+    def _assign_certificate_serial_if_needed(self, *, receipt_date_changed=False):
+        """Assign or move a daily serial when its received date changes."""
+        if not self.pk:
             return
 
         numbering_mode = self._certificate_numbering_mode()
+        if self.certificate_serial and (
+            numbering_mode == "continuous" or not receipt_date_changed
+        ):
+            return
         # A daily certificate must be sequenced against its received date. A
         # booking may be created before that date is entered, so wait instead
         # of reserving a serial from the unrelated booking date.
