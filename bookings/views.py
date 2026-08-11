@@ -831,6 +831,14 @@ class BookingApproveView(RoleRequiredMixin, PermissionRequiredMixin, View):
     required_roles = ("Checked By",)
     allow_staff = False
 
+    def has_permission(self):
+        # The dedicated Assign Bookings permission is intentionally enough
+        # for this action; it must not require broad booking-edit access too.
+        return self.request.user.has_perm("bookings.assign_booking") or super().has_permission()
+
+    def test_func(self):
+        return self.request.user.has_perm("bookings.assign_booking") or super().test_func()
+
     def post(self, request, pk):
         booking = get_object_or_404(Booking, pk=pk)
         if booking.status == Booking.Status.APPROVED:
