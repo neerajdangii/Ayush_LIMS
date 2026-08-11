@@ -299,8 +299,8 @@ class AdminUserCreateForm(UserCreationForm):
         self._editing_existing = False
         _restrict_delegated_access(self, grantor)
         self.fields["username"].widget.attrs["class"] = "form-control"
-        self.fields["password1"].widget.attrs.update({"class": "form-control", "maxlength": "16"})
-        self.fields["password2"].widget.attrs.update({"class": "form-control", "maxlength": "16"})
+        self.fields["password1"].widget.attrs.update({"class": "form-control", "maxlength": "25"})
+        self.fields["password2"].widget.attrs.update({"class": "form-control", "maxlength": "25"})
         self.fields["is_staff"].widget.attrs["class"] = "form-check-input"
         self.fields["is_checked_by"].widget.attrs["class"] = "form-check-input"
         self.fields["is_person_incharge"].widget.attrs["class"] = "form-check-input"

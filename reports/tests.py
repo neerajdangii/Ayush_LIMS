@@ -169,8 +169,11 @@ class CertificateNumberingTests(TestCase):
         settings.save(update_fields=["certificate_numbering_mode", "updated_at"])
 
     def test_later_booking_on_the_same_received_date_continues_the_serial(self):
-        first_receipt = timezone.make_aware(datetime(2026, 8, 10, 9, 0))
-        later_receipt = timezone.make_aware(datetime(2026, 8, 10, 15, 0))
+        # This intentionally uses an earlier clock time on the booking that
+        # is entered later. Serial numbering must use the received *date*,
+        # not restart because of the time-of-day comparison.
+        first_receipt = timezone.make_aware(datetime(2026, 8, 10, 15, 0))
+        later_receipt = timezone.make_aware(datetime(2026, 8, 10, 9, 0))
 
         for _ in range(10):
             Booking.objects.create(
