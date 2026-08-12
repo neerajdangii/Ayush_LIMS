@@ -59,6 +59,10 @@ class _TDSBooking:
         self._booking = booking
 
     def __getattr__(self, name):
+        if name in {"manufacture_date", "mfg_date"}:
+            return _format_report_date(self._booking.manufacture_date, month_year_only=True)
+        if name in {"expiry_retest_date", "expiry_date", "expire_date", "exp_date"}:
+            return _format_report_date(self._booking.expiry_retest_date, month_year_only=True)
         value = getattr(self._booking, name)
         if name == "sample_name" and value is not None:
             return _TDSSampleName(value)

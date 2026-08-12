@@ -125,6 +125,16 @@ class TDSRenderingSafetyTests(SimpleTestCase):
 
         self.assertEqual(rendered, "<p>Finished Product</p>")
 
+    def test_tds_mfg_and_expiry_booking_fields_use_their_own_not_specified_values(self):
+        rendered = _render_tds_content(
+            "<p>{{ booking.manufacture_date }} | {{ booking.expiry_retest_date }}</p>",
+            self.booking,
+            self.request,
+            TDSDocumentTemplate.DocumentType.CS,
+        )
+
+        self.assertEqual(rendered, "<p>N.S. | N.S.</p>")
+
     def test_full_letterhead_renders_as_img_elements_for_print_stability(self):
         letterhead = SimpleNamespace(
             layout_mode="full",
