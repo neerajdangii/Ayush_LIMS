@@ -2,6 +2,8 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import Group, Permission, User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -416,6 +418,16 @@ class AdminUserCreateForm(UserCreationForm):
 
 class AdminUserUpdateForm(forms.ModelForm):
     email = forms.EmailField(required=False, widget=forms.EmailInput(attrs={"class": "form-control"}))
+    new_password1 = forms.CharField(
+        required=False,
+        label="New password",
+        widget=forms.PasswordInput(attrs={"class": "form-control", "autocomplete": "new-password"}),
+    )
+    new_password2 = forms.CharField(
+        required=False,
+        label="Confirm new password",
+        widget=forms.PasswordInput(attrs={"class": "form-control", "autocomplete": "new-password"}),
+    )
     is_staff = forms.BooleanField(required=False)
     is_active = forms.BooleanField(required=False)
     is_checked_by = forms.BooleanField(required=False, label="Checked By")
@@ -554,12 +566,29 @@ class AdminUserUpdateForm(forms.ModelForm):
         if not (grantor and grantor.is_superuser):
             self.fields["is_active"].disabled = True
 
+    def clean(self):
+        cleaned_data = super().clean()
+        password1 = cleaned_data.get("new_password1")
+        password2 = cleaned_data.get("new_password2")
+        if password1 or password2:
+            if password1 != password2:
+                self.add_error("new_password2", "The two passwords do not match.")
+            else:
+                try:
+                    validate_password(password1, self.instance)
+                except ValidationError as exc:
+                    self.add_error("new_password1", exc)
+        return cleaned_data
+
     def save(self, commit=True):
         originally_active = bool(self.instance.is_active)
         user = super().save(commit=False)
         user.email = self.cleaned_data.get("email", "")
         user.first_name = (self.cleaned_data.get("first_name") or "").strip()
         user.last_name = (self.cleaned_data.get("last_name") or "").strip()
+        new_password = self.cleaned_data.get("new_password1")
+        if new_password:
+            user.set_password(new_password)
 
         checked_by = bool(self.cleaned_data.get("is_checked_by"))
         person_incharge = bool(self.cleaned_data.get("is_person_incharge"))
