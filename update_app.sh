@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="/root/Ayush_Project"
+PROJECT_DIR="/root/Ayush_LIMS"
 
 if command -v docker-compose >/dev/null 2>&1; then
   COMPOSE_CMD="docker-compose"

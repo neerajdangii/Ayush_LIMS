@@ -182,7 +182,7 @@ class SystemSettingForm(forms.ModelForm):
 
 class LoginForm(AuthenticationForm):
     username = forms.CharField(widget=forms.TextInput(attrs={"class": "form-control"}))
-    password = forms.CharField(widget=forms.PasswordInput(attrs={"class": "form-control", "maxlength": "16"}))
+    password = forms.CharField(widget=forms.PasswordInput(attrs={"class": "form-control", "maxlength": "25"}))
 
     error_messages = {
         "invalid_login": "Invalid username or password.",
