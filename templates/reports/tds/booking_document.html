@@ -1341,6 +1341,14 @@
       flex: 0 0 auto;
       margin-top: auto !important;
     }
+    {% if document_type != 'cs' and document_type != 'job_order' %}
+    /* The page-flow normalizer above resets min-height with !important.
+       Restore it only for master pages that have a footer, so margin-top:
+       auto has the printable page space needed to anchor that footer. */
+    .tds-master-print-page.tds-master-has-footer {
+      min-height: 280mm !important;
+    }
+    {% endif %}
     {% if document_type == 'cs' %}
     /* The general print normalizer clears master-page heights.  Restore the
        continuation-sheet page height after that normalizer so its footer is
@@ -1463,7 +1471,7 @@
       {% else %}
       {% for item in rendered_templates %}
       {% if item.use_source_file %}
-      <section class="tds-master-print-page">
+      <section class="tds-master-print-page{% if item.footer_content %} tds-master-has-footer{% endif %}">
         {% if can_edit_tds_template %}
         <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
         {% endif %}
@@ -1495,7 +1503,7 @@
       </section>
       {% else %}
         {% for page in item.pages %}
-        <section class="tds-master-print-page">
+        <section class="tds-master-print-page{% if page.footer_content %} tds-master-has-footer{% endif %}">
           {% if can_edit_tds_template and forloop.first %}
           <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
           {% endif %}
