@@ -598,6 +598,9 @@ class BookingCreateView(RoleRequiredMixin, PermissionRequiredMixin, CreateView):
 
     def get_initial(self):
         initial = super().get_initial()
+        # Regulatory is the normal workflow for newly created bookings. A
+        # duplicated booking keeps its original type below.
+        initial["booking_type"] = Booking.BookingType.REGULATORY
         duplicate_id = self.request.GET.get("duplicate")
         if duplicate_id:
             source = get_object_or_404(Booking, pk=duplicate_id)
