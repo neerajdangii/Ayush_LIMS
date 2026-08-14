@@ -114,6 +114,28 @@
 <script>
   (function () {
     let tries = 0;
+    const originalEditorValues = new Map();
+    const changedEditorIds = new Set();
+
+    function editorTargets() {
+      return document.querySelectorAll(
+        'textarea[data-editor="tinymce"], textarea[data-editor="tinymce-header"], textarea[data-editor="tinymce-footer"]'
+      );
+    }
+
+    function rememberOriginalEditorValues() {
+      editorTargets().forEach(function (target) {
+        if (!originalEditorValues.has(target.id)) {
+          originalEditorValues.set(target.id, target.value);
+          target.addEventListener('input', function () {
+            changedEditorIds.add(target.id);
+          });
+          target.addEventListener('change', function () {
+            changedEditorIds.add(target.id);
+          });
+        }
+      });
+    }
 
     function editorConfig(selector, height) {
       return {
@@ -141,9 +163,16 @@
     }
 
     function syncEditor() {
-      if (window.tinymce) {
-        window.tinymce.triggerSave();
-      }
+      editorTargets().forEach(function (target) {
+        const editor = window.tinymce ? window.tinymce.get(target.id) : null;
+        if (editor && changedEditorIds.has(target.id)) {
+          editor.save();
+        } else if (originalEditorValues.has(target.id)) {
+          // Do not let TinyMCE reserialize an untouched master field when an
+          // unrelated template setting is saved.
+          target.value = originalEditorValues.get(target.id);
+        }
+      });
     }
 
     function getCookie(name) {
@@ -160,6 +189,7 @@
       if (!textarea) {
         return;
       }
+      changedEditorIds.add(textarea.id);
       const editor = window.tinymce ? window.tinymce.get(textarea.id) : null;
       if (editor) {
         editor.setContent(content || '');
@@ -249,12 +279,11 @@
     
 
     function initEditor() {
-      const targets = document.querySelectorAll(
-        'textarea[data-editor="tinymce"], textarea[data-editor="tinymce-header"], textarea[data-editor="tinymce-footer"]'
-      );
+      const targets = editorTargets();
       if (!targets.length) {
         return;
       }
+      rememberOriginalEditorValues();
       if (!window.tinymce || typeof window.tinymce.init !== 'function') {
         if (tries < 40) {
           tries += 1;
@@ -267,7 +296,13 @@
           return;
         }
         const isSmallEditor = target.dataset.editor === 'tinymce-header' || target.dataset.editor === 'tinymce-footer';
-        window.tinymce.init(editorConfig(`#${target.id}`, isSmallEditor ? 240 : 620));
+        const config = editorConfig(`#${target.id}`, isSmallEditor ? 240 : 620);
+        config.setup = function (editor) {
+          editor.on('input change undo redo', function () {
+            changedEditorIds.add(target.id);
+          });
+        };
+        window.tinymce.init(config);
       });
 
       const form = document.getElementById('tds-template-form');
@@ -281,6 +316,8 @@
       initDisplayModeToggle();
       initSourceFileImport();
     }
+
+    rememberOriginalEditorValues();
 
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initEditor);
