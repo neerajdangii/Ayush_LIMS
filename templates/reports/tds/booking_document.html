@@ -7,7 +7,8 @@
   @media screen {
     html,
     body {
-      background: #e5e7eb !important;
+      /* Keep the document preview clean; this does not affect printed pages. */
+      background: #fff !important;
       margin: 0 !important;
       padding: 0 !important;
     }
@@ -24,8 +25,8 @@
       box-sizing: border-box;
     }
     .tds-print-sheet {
-      width: min({% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}216mm{% else %}210mm{% endif %}, calc(100% - 16mm));
-      min-height: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}279mm{% else %}297mm{% endif %};
+      width: min({% if document_type == 'ads' %}216mm{% else %}210mm{% endif %}, calc(100% - 16mm));
+      min-height: {% if document_type == 'ads' %}279mm{% else %}297mm{% endif %};
       margin: 0 auto !important;
       padding: {% if document_type == 'ac' %}1.5mm 6.5mm 7mm{% elif document_type == 'job_order' %}13mm 8mm 9mm{% elif document_type == 'checklist' %}1.5mm 6.5mm 7mm{% else %}5mm 7mm{% endif %} !important;
       box-sizing: border-box;
@@ -42,16 +43,6 @@
       padding: 0 !important;
     }
     {% if document_type == 'ac' %}
-    .tds-template-content {
-      zoom: 0.8;
-    }
-    @supports not (zoom: 1) {
-      .tds-template-content {
-        transform: scale(0.8);
-        transform-origin: top center;
-        width: 125% !important;
-      }
-    }
     .tds-template-content .tds-ac-document {
       margin: 0 auto !important;
       width: 100% !important;
@@ -59,39 +50,17 @@
     {% endif %}
     {% if document_type == 'job_order' %}
     .tds-template-content {
-      min-height: auto !important;
-      position: relative;
-      padding-bottom: 0 !important;
-    }
-    .tds-template-content .tds-job-footer {
-      position: static !important;
-      width: 100% !important;
-      margin-top: 4mm !important;
-      box-sizing: border-box !important;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
-    }
-    .tds-template-content .tds-job-experimental {
+      height: auto !important;
+      min-height: 0 !important;
       position: relative;
     }
-    .tds-template-content .tds-job-sign-table,
-    .tds-template-content .tds-job-footer-table,
-    .tds-template-content .tds-job-page-marker {
-      position: static !important;
-      bottom: auto !important;
-      left: auto !important;
-      right: auto !important;
+    .tds-template-content .tds-job-sign-table {
+      bottom: 22mm;
+      left: 0;
       margin: 0 !important;
+      position: absolute;
+      right: 0;
       width: 100% !important;
-      text-align: center;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
-    }
-    .tds-template-content .tds-job-tests,
-    .tds-template-content .tds-job-tests tbody,
-    .tds-template-content .tds-job-tests tr {
-      page-break-inside: auto !important;
-      break-inside: auto !important;
     }
     .tds-template-content .tds-job-sign-table td {
       height: 16mm;
@@ -105,46 +74,40 @@
     .tds-template-content .tds-job-footer-table th {
       border: 0 !important;
     }
+    .tds-template-content .tds-job-footer-table {
+      bottom: 8mm;
+      left: 0;
+      margin: 0 !important;
+      position: absolute;
+      right: 0;
+      text-align: center;
+      width: 100% !important;
+    }
     .tds-template-content .tds-job-page-marker {
+      bottom: 8mm;
       font-weight: 700;
-    }
-    {% endif %}
-    {% if document_type == 'checklist' %}
-    .tds-template-content {
-      zoom: 0.8;
-    }
-    @supports not (zoom: 1) {
-      .tds-template-content {
-        transform: scale(0.8);
-        transform-origin: top center;
-        width: 125% !important;
-      }
+      left: 0;
+      margin: 0 !important;
+      position: absolute;
+      right: 0;
+      text-align: center;
     }
     {% endif %}
   }
   {% endif %}
   .tds-template-content {
     color: #000;
-    font-family: "Times New Roman", Times, serif;
-    font-size: 12px;
-    line-height: 1.2;
   }
-  .tds-template-content p { margin: 0 0 3px; }
-  .tds-template-content > :last-child { margin-bottom: 0 !important; }
   .tds-template-content p:empty { display: none !important; }
+  /* Keep newly inserted master tables readable. These are defaults only, so
+     a border, width, padding, or alignment chosen in TinyMCE still wins. */
   .tds-template-content table {
+    border-collapse: collapse;
     width: 100%;
-    border-collapse: collapse !important;
-    table-layout: fixed;
-  }
-  .tds-template-content table,
-  .tds-template-content th,
-  .tds-template-content td {
-    border: 1px solid #000 !important;
-    border-color: #000 !important;
   }
   .tds-template-content th,
   .tds-template-content td {
+    border: 1px solid #000;
     padding: 2px 3px;
     vertical-align: top;
   }
@@ -162,12 +125,88 @@
     background: #fff;
     box-sizing: border-box;
     color: #000;
+    display: flex;
+    flex-direction: column;
     font-family: "Times New Roman", Times, serif;
     min-height: 279mm;
     padding: 7mm;
   }
+  .tds-ads-page-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .tds-ads-page-footer {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 4mm;
+  }
   .tds-ads-print-page + .tds-ads-print-page {
     margin-top: 8mm;
+  }
+  /* Non-ADS TDS masters use an explicit page layout too: their header and
+     footer never become part of the editable body flow. */
+  .tds-master-print-page {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-height: 285mm;
+  }
+  .tds-master-page-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .tds-master-page-footer {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 4mm;
+  }
+  {% if document_type == 'cs' %}
+  /* The continuation sheet has an intentionally short, blank body.  Anchor
+     its document footer to the physical page instead of relying on the
+     flexible body height, which some print engines collapse. */
+  .tds-master-print-page {
+    height: 280mm;
+    min-height: 280mm;
+    position: relative;
+  }
+  .tds-master-page-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Keep the blank writing table above the anchored page footer. */
+    padding-bottom: 9mm;
+  }
+  .tds-master-page-body > .tds-template-content {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .tds-master-page-body > .tds-template-content > table {
+    flex: 1 1 auto;
+  }
+  .tds-master-page-footer {
+    bottom: 0;
+    left: 0;
+    margin-top: 0;
+    position: absolute;
+    right: 0;
+  }
+  {% endif %}
+  /* Paste this class into an optional TinyMCE footer when the document
+     number needs custom formatting. */
+  .tds-custom-page-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    width: 100%;
+  }
+  .tds-footer-page-number {
+    text-align: center;
+  }
+  .tds-footer-document-number {
+    font-weight: 700;
+    text-align: right;
   }
   .tds-ads-page-number {
     font-family: "Times New Roman", Times, serif;
@@ -198,13 +237,37 @@
   }
   {% if document_type == 'checklist' %}
   .tds-template-content {
+    box-sizing: border-box;
     font-family: Arial, Helvetica, sans-serif;
     font-size: 16px;
     line-height: 1.15;
+    /* 97.5% is the largest checklist scale that fits on one A4 page. */
+    min-height: 295.9mm;
+    position: relative;
+    zoom: 0.975;
+  }
+  /* Use this class on the final TinyMCE footer div. */
+  .tds-template-content .tds-checklist-page-footer {
+    bottom: 8mm;
+    display: grid;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 12pt;
+    grid-template-columns: 1fr 1fr 1fr;
+    left: 0;
+    position: absolute;
+    right: 0;
+  }
+  .tds-template-content .tds-checklist-page-footer b:first-child {
+    grid-column: 2;
+    text-align: center;
+  }
+  .tds-template-content .tds-checklist-page-footer b:last-child {
+    grid-column: 3;
+    text-align: right;
   }
   .tds-sample-checklist {
     box-sizing: border-box;
-    min-height: 270.5mm;
+    min-height: 288.5mm;
     position: relative;
   }
   .tds-template-content .tds-sample-checklist table {
@@ -355,6 +418,16 @@
   .tds-template-content .tds-check-footer-table td:last-child {
     text-align: right !important;
   }
+  .tds-template-content .tds-check-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    margin-top: 5mm;
+    page-break-inside: avoid;
+    text-align: center;
+  }
+  .tds-template-content .tds-check-footer strong:last-child {
+    text-align: right;
+  }
   .tds-template-content,
   .tds-template-content * {
     scrollbar-width: none;
@@ -367,9 +440,8 @@
   {% endif %}
   {% if document_type == 'job_order' %}
   .tds-template-content {
-    font-size: 9px;
-    line-height: 1.05;
-    min-height: 257mm;
+    height: 262mm;
+    min-height: 0;
     position: relative;
   }
   .tds-template-content p {
@@ -394,18 +466,13 @@
   .tds-template-content table:last-of-type {
     margin-bottom: 0;
   }
-  .tds-template-content .tds-job-sign-table,
-  .tds-template-content .tds-job-footer-table,
-  .tds-template-content .tds-job-page-marker {
-    position: static !important;
-    bottom: auto !important;
-    left: auto !important;
-    right: auto !important;
+  .tds-template-content .tds-job-sign-table {
+    bottom: 22mm;
+    left: 0;
     margin: 0 !important;
+    position: absolute;
+    right: 0;
     width: 100% !important;
-    text-align: center;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
   }
   .tds-template-content .tds-job-sign-table td {
     height: 16mm;
@@ -419,24 +486,38 @@
   .tds-template-content .tds-job-footer-table th {
     border: 0 !important;
   }
-  .tds-template-content .tds-job-footer {
-    position: static !important;
+  .tds-template-content .tds-job-footer-table {
+    bottom: 8mm;
+    left: 0;
+    margin: 0 !important;
+    position: absolute;
+    right: 0;
+    text-align: center;
     width: 100% !important;
-    margin-top: 4mm !important;
-    box-sizing: border-box !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
   }
   .tds-template-content .tds-job-page-marker {
+    bottom: 8mm;
     font-weight: 700;
+    left: 0;
+    margin: 0 !important;
+    position: absolute;
+    right: 0;
+    text-align: center;
   }
   .tds-template-content .tds-job-order {
     box-sizing: border-box;
-    font-size: 11px;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
     line-height: 1.15;
-    min-height: 257mm;
+    height: 262mm;
+    min-height: 0;
     padding-bottom: 42mm;
     position: relative;
+  }
+  .tds-template-content .tds-job-order,
+  .tds-template-content .tds-job-order * {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
   }
   .tds-template-content .tds-job-order table {
     border-collapse: collapse !important;
@@ -454,6 +535,8 @@
   }
   .tds-template-content .tds-job-order td,
   .tds-template-content .tds-job-order th {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
     border: 1px solid #000 !important;
     padding: 3px 4px;
     vertical-align: middle;
@@ -507,7 +590,11 @@
     margin-left: 64px;
   }
   .tds-job-tests th {
+    font-family: "Times New Roman", Times, serif;
     text-align: center;
+  }
+  .tds-job-tests td {
+    font-family: "Times New Roman", Times, serif;
   }
   .tds-job-tests .job-sr {
     text-align: center;
@@ -522,31 +609,17 @@
   .tds-job-tests th:nth-child(4) {
     width: 24%;
   }
-  .tds-template-content .tds-job-footer {
-    position: static !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-    padding: 0 3mm !important;
-    display: block !important;
-    margin-top: 4mm !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
   .tds-job-signatures {
+    bottom: 22mm;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 2mm;
-    width: 100%;
-    max-width: 100%;
-    position: relative;
-    page-break-inside: avoid;
+    grid-template-columns: repeat(3, 1fr);
+    left: 0;
+    position: absolute;
+    right: 0;
   }
   .tds-job-signatures > div {
-    font-size: 11px;
-    min-height: 16mm;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
   }
   .tds-job-signatures > div:nth-child(2) {
     text-align: center;
@@ -555,8 +628,58 @@
     text-align: right;
   }
   .tds-job-page {
-    margin-top: 4mm;
-    position: relative;
+    bottom: 8mm;
+    left: 0;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
+    position: absolute;
+    right: 0;
+    text-align: center;
+  }
+  .tds-template-content {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 8mm;
+  }
+  .tds-template-content > .tds-job-order {
+    box-sizing: border-box;
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    min-height: 100%;
+    padding-bottom: 0;
+  }
+  .tds-template-content .tds-job-footer {
+    break-inside: avoid;
+    display: flex;
+    flex-direction: column;
+    margin-top: auto;
+    page-break-inside: avoid;
+  }
+  .tds-template-content .tds-job-footer > div[style*="min-height"] {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .tds-template-content .tds-job-footer .tds-job-signatures,
+  .tds-template-content .tds-job-footer .tds-job-sign-table {
+    bottom: auto;
+    left: auto;
+    margin: 0 !important;
+    position: static;
+    right: auto;
+  }
+  .tds-template-content .tds-job-footer .tds-job-signatures > div:first-child {
+    text-align: left !important;
+  }
+  .tds-template-content .tds-job-footer .tds-job-page,
+  .tds-template-content .tds-job-footer .tds-job-page-marker,
+  .tds-template-content .tds-job-footer .tds-job-footer-table {
+    bottom: auto;
+    left: auto;
+    margin: 5mm 0 0 !important;
+    position: static;
+    right: auto;
     text-align: center;
   }
   {% endif %}
@@ -662,34 +785,140 @@
   .tds-ac-footer strong:last-child {
     text-align: right;
   }
-  {% if document_type == 'ac' %}
-  .tds-template-content {
-    zoom: 0.8;
+  .tds-template-content .tds-compact-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    margin-top: 5mm;
+    page-break-inside: avoid;
+    text-align: center;
   }
-  @supports not (zoom: 1) {
-    .tds-template-content {
-      transform: scale(0.8);
-      transform-origin: top center;
-      width: 125% !important;
-    }
+  .tds-template-content .tds-compact-footer strong:last-child {
+    text-align: right;
   }
-  {% endif %}
-  {% if document_type == 'checklist' %}
-  .tds-template-content {
-    zoom: 0.8;
+  {% if document_type == 'trf' %}
+  .tds-trf-document {
+    box-sizing: border-box;
+    margin: 0 auto;
+    max-width: 180mm;
+    padding-bottom: 8mm;
   }
-  @supports not (zoom: 1) {
-    .tds-template-content {
-      transform: scale(0.8);
-      transform-origin: top center;
-      width: 125% !important;
-    }
+  .tds-trf-document table {
+    border-collapse: collapse !important;
+    height: auto !important;
+    margin: 0 0 1.5mm !important;
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+  .tds-trf-document td,
+  .tds-trf-document th {
+    border: 1px solid #000 !important;
+    padding: 1px 3px !important;
+    vertical-align: middle !important;
+  }
+  .tds-trf-header td {
+    text-align: center;
+  }
+  .tds-trf-logo {
+    width: 33%;
+  }
+  .tds-trf-header img {
+    height: 48px !important;
+    margin: 0 auto !important;
+    max-width: 105px !important;
+    object-fit: contain;
+    width: auto !important;
+  }
+  .tds-trf-title {
+    border-top: 1px solid #000;
+    margin: 2px -3px -1px;
+    padding-top: 1px;
+  }
+  .tds-trf-date {
+    margin: 0 0 1mm;
+    text-align: right;
+  }
+  .tds-trf-customer td:first-child,
+  .tds-trf-sample td:first-child {
+    font-weight: 700;
+    width: 18%;
+  }
+  .tds-trf-customer td:nth-child(3),
+  .tds-trf-sample td:nth-child(3) {
+    font-weight: 700;
+    width: 25%;
+  }
+  .tds-trf-note {
+    margin: 2mm 0 2mm !important;
+  }
+  .tds-trf-tests td {
+    height: 8mm;
+    vertical-align: top !important;
+  }
+  .tds-trf-sign-area td {
+    height: 32mm !important;
+    vertical-align: bottom !important;
+  }
+  .tds-trf-sign-area div {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 7mm;
+  }
+  /* Compatibility layout for the existing editable TRF master. */
+  .tds-trf-document > table:nth-of-type(1) td {
+    text-align: center !important;
+  }
+  .tds-trf-document > table:nth-of-type(1) td:first-child {
+    width: 33% !important;
+  }
+  .tds-trf-document > table:nth-of-type(1) img {
+    display: block;
+    height: 48px !important;
+    margin: 0 auto !important;
+    max-width: 105px !important;
+    object-fit: contain;
+    width: auto !important;
+  }
+  .tds-trf-document > p:first-of-type {
+    margin: 1mm 0 !important;
+    text-align: right !important;
+  }
+  .tds-trf-document > p:nth-of-type(2) {
+    margin: 2mm 0 !important;
+  }
+  .tds-trf-document > table:nth-of-type(2) td:first-child,
+  .tds-trf-document > table:nth-of-type(3) td:first-child {
+    font-weight: 700;
+  }
+  .tds-trf-document > table:nth-of-type(2) th,
+  .tds-trf-document > table:nth-of-type(3) th {
+    font-weight: 700;
+  }
+  .tds-trf-document > table:nth-of-type(3) tr {
+    height: auto !important;
+  }
+  .tds-trf-document > table:nth-of-type(3) tr:nth-last-child(2) td {
+    height: 7mm !important;
+  }
+  .tds-trf-document > table:nth-of-type(3) tr:last-child td {
+    height: 30mm !important;
+    vertical-align: bottom !important;
+  }
+  .tds-trf-document > table:nth-of-type(3) tr:last-child p {
+    margin: 0 !important;
+  }
+  .tds-trf-footer {
+    display: grid;
+    font-weight: 700;
+    grid-template-columns: 1fr 1fr 1fr;
+    margin-top: 5mm;
+    text-align: center;
+  }
+  .tds-trf-footer span:last-child {
+    text-align: right;
   }
   {% endif %}
   @media print {
-    /* Disable absolute positioning for footer/signature blocks to avoid overlap */
-    .tds-template-content .tds-job-sign-table,
-    .tds-template-content .tds-job-footer-table,
+    /* Normalize document footers for print. */
     .tds-template-content .tds-check-sign-table,
     .tds-template-content .tds-check-footer-table,
     .tds-template-content .tds-job-page-marker {
@@ -699,16 +928,19 @@
       right: auto !important;
       width: 100% !important;
     }
-    .tds-template-content .tds-job-order,
     .tds-template-content .tds-sample-checklist {
       padding-bottom: 0 !important;
       position: static !important;
     }
     @page {
-      size: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}Letter{% else %}A4{% endif %};
+      size: {% if document_type == 'ads' %}Letter{% else %}A4{% endif %};
       margin: {% if document_type == 'ac' or document_type == 'ads' or document_type == 'job_order' or document_type == 'checklist' %}0{% else %}8mm{% endif %};
     }
-    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    html, body, main.app-shell, .tds-print-sheet, .tds-print-sheet .card-body {
+      background: #fff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
     body::before, nav, .tds-document-actions { display: none !important; }
     main.app-shell { width: 100%; margin: 0 !important; padding: 0 !important; }
     .tds-print-sheet,
@@ -724,51 +956,25 @@
       padding: {% if document_type == 'ac' %}1.5mm 6.5mm 7mm{% elif document_type == 'job_order' %}13mm 8mm 9mm{% elif document_type == 'checklist' %}1.5mm 6.5mm 7mm{% else %}0{% endif %} !important;
       box-sizing: border-box !important;
     }
-    .tds-template-content {
-      font-size: 12px !important;
-      line-height: 1.2 !important;
+    {% if document_type == 'trf' %}
+    .tds-print-sheet {
+      padding: 6mm 10mm !important;
     }
+    {% endif %}
     .tds-template-content table {
       width: 100% !important;
       table-layout: fixed;
     }
     .tds-template-content .tds-ac-document {
-      font-size: 12px !important;
-      line-height: 1.12 !important;
       margin: 0 auto !important;
       width: 100% !important;
     }
     .tds-template-content .tds-ac-document table {
       table-layout: auto !important;
     }
-    {% if document_type == 'ac' %}
-    .tds-template-content {
-      zoom: 0.8 !important;
-    }
-    @supports not (zoom: 1) {
-      .tds-template-content {
-        transform: scale(0.8);
-        transform-origin: top center;
-        width: 125% !important;
-      }
-    }
-    {% endif %}
     {% if document_type == 'checklist' %}
-    .tds-template-content {
-      font-family: Arial, Helvetica, sans-serif !important;
-      font-size: 16px !important;
-      line-height: 1.15 !important;
-      zoom: 0.8 !important;
-    }
-    @supports not (zoom: 1) {
-      .tds-template-content {
-        transform: scale(0.8);
-        transform-origin: top center;
-        width: 125% !important;
-      }
-    }
     .tds-sample-checklist {
-      min-height: 270.5mm;
+      min-height: 288.5mm;
       position: relative;
     }
     .tds-template-content .tds-sample-checklist td,
@@ -817,18 +1023,16 @@
     {% endif %}
     {% if document_type == 'job_order' %}
     .tds-template-content {
-      font-size: 9px !important;
-      line-height: 1.05 !important;
-      min-height: auto !important;
+      height: auto !important;
+      min-height: 0 !important;
       position: relative;
-      padding-bottom: 0 !important;
     }
     .tds-template-content table {
-      margin: 0 0 8px !important;
+      margin: 0 0 4px !important;
     }
     .tds-template-content th,
     .tds-template-content td {
-      padding: 2px 3px !important;
+      padding: 1px 3px !important;
       vertical-align: middle !important;
     }
     .tds-template-content table:first-of-type td,
@@ -839,18 +1043,48 @@
       max-height: 58px !important;
       object-fit: contain;
     }
-    .tds-template-content .tds-job-sign-table,
-    .tds-template-content .tds-job-footer-table,
-    .tds-template-content .tds-job-page-marker {
-      position: static !important;
+    /*
+     * Keep the Job Order footer anchored to the printable page.  The order
+     * body must remain content-sized: making it a full-height flex item adds
+     * a second, otherwise blank, page for short test lists.
+     */
+    .tds-template-content {
+      box-sizing: border-box !important;
+      display: block !important;
+      padding-bottom: 0 !important;
+    }
+    .tds-template-content > .tds-job-order {
+      box-sizing: border-box !important;
+      display: block !important;
+      height: auto !important;
+      min-height: 0 !important;
+      padding-bottom: 0 !important;
+    }
+    .tds-template-content > div[style*="min-height"],
+    .tds-template-content > .tds-job-order > div[style*="min-height"],
+    .tds-template-content .tds-job-footer > div[style*="min-height"] {
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    .tds-template-content .tds-job-footer {
+      bottom: 9mm !important;
+      break-inside: avoid !important;
+      display: flex !important;
+      flex-direction: column !important;
+      left: 8mm !important;
+      margin: 0 !important;
+      page-break-inside: avoid !important;
+      position: fixed !important;
+      right: 8mm !important;
+      z-index: 1;
+    }
+    .tds-template-content .tds-job-sign-table {
       bottom: auto !important;
       left: auto !important;
+      margin: 0 !important;
+      position: static !important;
       right: auto !important;
       width: 100% !important;
-      margin: 0 !important;
-      text-align: center;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
     }
     .tds-template-content .tds-job-sign-table td {
       height: 16mm;
@@ -864,43 +1098,76 @@
     .tds-template-content .tds-job-footer-table th {
       border: 0 !important;
     }
-    .tds-template-content .tds-job-footer {
+    .tds-template-content .tds-job-footer-table {
+      bottom: auto !important;
+      left: auto !important;
+      margin: 5mm 0 0 !important;
       position: static !important;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
-      margin-top: 4mm !important;
+      right: auto !important;
+      text-align: center;
       width: 100% !important;
-      box-sizing: border-box !important;
+    }
+    .tds-template-content .tds-job-page-marker {
+      bottom: auto !important;
+      font-weight: 700;
+      left: auto !important;
+      margin: 5mm 0 0 !important;
+      position: static !important;
+      right: auto !important;
+      text-align: center;
     }
     .tds-template-content .tds-job-order {
-      font-size: 11px !important;
-      line-height: 1.15 !important;
-      min-height: auto !important;
-      padding-bottom: 0 !important;
-      position: relative;
-    }
-    .tds-template-content .tds-job-order table:last-of-type {
-      bottom: auto;
-      left: auto;
-      margin: 0 0 9px !important;
+      height: 262mm;
+      min-height: 0;
       position: static;
-      right: auto;
-      width: 100% !important;
     }
     .tds-template-content .tds-job-order td,
     .tds-template-content .tds-job-order th {
-      padding: 3px 4px !important;
+      padding: 2px 4px !important;
     }
-    .tds-job-signatures {
-      position: static !important;
-      bottom: auto !important;
-      margin-top: 0 !important;
+    .tds-template-content .tds-job-tests .tds-job-test-row,
+    .tds-template-content .tds-job-tests .tds-job-test-row td {
+      height: 6mm !important;
     }
-    .tds-job-page {
-      position: static !important;
+    .tds-template-content .tds-job-signatures {
       bottom: auto !important;
-      margin-top: 4mm !important;
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      left: auto !important;
+      margin: 0 !important;
+      position: static !important;
+      right: auto !important;
+    }
+    .tds-template-content .tds-job-page {
+      bottom: auto !important;
+      left: auto !important;
+      margin: 5mm 0 0 !important;
+      position: static !important;
+      right: auto !important;
       text-align: center !important;
+    }
+    .tds-template-content .tds-job-footer,
+    .tds-template-content .tds-job-signatures,
+    .tds-template-content .tds-job-sign-table,
+    .tds-template-content .tds-job-footer-table,
+    .tds-template-content .tds-job-page,
+    .tds-template-content .tds-job-page-marker {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+    section,
+    section .tds-template-content {
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+    .tds-template-content .tds-job-tests,
+    .tds-template-content .tds-job-tests tbody {
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+    .tds-template-content .tds-job-tests tr {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
     }
     {% endif %}
     {% if document_type == 'ads' %}
@@ -908,8 +1175,13 @@
       padding: 0 !important;
     }
     .tds-ads-print-page {
-      display: block;
+      display: flex !important;
+      flex-direction: column;
+      height: 279mm;
+      min-height: 279mm;
       margin: 0 !important;
+      padding: 7mm;
+      position: relative;
       break-inside: avoid;
       page-break-inside: avoid;
     }
@@ -919,14 +1191,22 @@
     }
     .tds-ads-page-body {
       overflow: visible;
+      padding-bottom: 16mm;
       page-break-inside: auto;
       break-inside: auto !important;
+    }
+    .tds-ads-page-footer {
+      bottom: 7mm;
+      left: 7mm;
+      margin: 0 !important;
+      position: absolute;
+      right: 7mm;
     }
     .tds-ads-print-page .tds-template-content {
       page-break-inside: auto !important;
       break-inside: auto !important;
     }
-    .tds-ads-print-page .tds-template-content ta￼ble,
+    .tds-ads-print-page .tds-template-content table,
     .tds-ads-print-page .tds-template-content table tbody,
     .tds-ads-print-page .tds-template-content table tr,
     .tds-ads-print-page .tds-template-content table thead,
@@ -961,7 +1241,180 @@
       page-break-inside: avoid;
       break-inside: avoid;
     }
+    /*
+       Editable TDS masters can contain long result tables.  Let their body
+       flow across printed pages; keeping the whole outer table/section
+       together is what caused the trailing Result and signature content to
+       be moved or clipped.  Individual rows and explicit signature blocks
+       remain intact.
+    */
+    .tds-master-print-page,
+    .tds-master-page-body,
+    .tds-master-page-body .tds-template-content {
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-master-page-body .tds-template-content table,
+    .tds-master-page-body .tds-template-content table tbody {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-master-page-body .tds-template-content tr,
+    .tds-master-page-body .tds-template-signature {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    /* Use one predictable printable width instead of the slightly oversized
+       percentages produced by Word/TinyMCE.  This prevents Chrome/Edge from
+       silently using a different Fit-to-page scale on another workstation. */
+    .tds-master-page-body .tds-template-content,
+    .tds-master-page-body .tds-template-content * {
+      box-sizing: border-box !important;
+    }
+    .tds-master-page-body .tds-template-content table {
+      max-width: 100% !important;
+      width: 100% !important;
+    }
+    .tds-master-page-body .tds-template-content td,
+    .tds-master-page-body .tds-template-content th {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    {% if document_type != 'cs' %}
+    /* Word/TinyMCE often leaves a page-sized pixel height on the outer table.
+       It is a screen-editor artefact, not a printable page boundary, and can
+       otherwise force the Result/signature content onto a blank third page.
+       The continuation sheet is intentionally a blank, full-height table, so
+       its authored table and row heights must be retained. */
+    .tds-master-page-body > .tds-template-content > table[style*="height"],
+    .tds-master-page-body > .tds-template-content > table[style*="height"] > tbody > tr[style*="height"] {
+      height: auto !important;
+    }
+    {% endif %}
+    {% if document_type == 'ac' %}
+    /* AC is a single A4 checklist: let its long table use the remaining page space. */
+    .tds-template-content table.tds-ac-checklist,
+    .tds-template-content table.tds-ac-checklist tbody {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-template-content .tds-ac-document td,
+    .tds-template-content .tds-ac-document th {
+      padding: 1px 2px !important;
+    }
+    .tds-template-content .tds-ac-checklist th,
+    .tds-template-content .tds-ac-checklist td {
+      height: 14px !important;
+    }
+    {% endif %}
+    {% if document_type == 'checklist' %}
+    .tds-template-content { min-height: 0 !important; }
+    .tds-template-content .tds-checklist-page-footer {
+      bottom: 8mm !important;
+      position: fixed !important;
+    }
+    /* Do not move a complete checklist to the next page just because one
+       table row no longer fits. Rows stay intact, but the table can flow. */
+    .tds-print-sheet section,
+    .tds-print-sheet section .tds-template-content,
+    .tds-print-sheet .tds-template-content table,
+    .tds-print-sheet .tds-template-content table tbody {
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+    }
+    .tds-print-sheet .tds-template-content table tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    {% endif %}
+    /* A footer entered in TDS Master consumes the unused page space, so it
+       stays at the bottom without changing the content above it. */
+    .tds-master-print-page {
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 280mm;
+    }
+    .tds-master-print-page .tds-master-page-footer {
+      flex: 0 0 auto;
+      margin-top: auto !important;
+    }
+    {% if document_type != 'cs' and document_type != 'job_order' %}
+    /* The page-flow normalizer above resets min-height with !important.
+       Restore it only for master pages that have a footer, so margin-top:
+       auto has the printable page space needed to anchor that footer. */
+    .tds-master-print-page.tds-master-has-footer {
+      min-height: 280mm !important;
+    }
+    {% endif %}
+    {% if document_type == 'cs' %}
+    /* The general print normalizer clears master-page heights.  Restore the
+       continuation-sheet page height after that normalizer so its footer is
+       anchored to the actual bottom edge of the printed A4 page. */
+    .tds-master-print-page {
+      height: 280mm !important;
+      min-height: 280mm !important;
+      position: relative !important;
+    }
+    .tds-master-print-page .tds-master-page-footer {
+      bottom: 0 !important;
+      left: 0 !important;
+      margin-top: 0 !important;
+      position: absolute !important;
+      right: 0 !important;
+    }
+    .tds-master-print-page .tds-master-page-body {
+      display: flex !important;
+      flex: 1 1 auto !important;
+      height: auto !important;
+      min-height: 0 !important;
+      padding-bottom: 9mm !important;
+    }
+    .tds-master-print-page .tds-master-page-body > .tds-template-content {
+      display: flex !important;
+      flex: 1 1 auto !important;
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    .tds-master-print-page .tds-master-page-body > .tds-template-content > table {
+      flex: 1 1 auto !important;
+    }
+    {% endif %}
+    {% if document_type == 'job_order' %}
+    /* Keep the Job Order signature/page block with the master footer.  An
+       outer page anchor is more reliable than an inner fixed element when
+       Chromium paginates the order body. */
+    .tds-master-print-page {
+      height: 275mm !important;
+      min-height: 275mm !important;
+      position: relative !important;
+    }
+    .tds-master-print-page .tds-master-page-footer {
+      bottom: 0 !important;
+      left: 0 !important;
+      margin-top: 0 !important;
+      position: absolute !important;
+      right: 0 !important;
+    }
+    .tds-master-print-page .tds-master-page-body {
+      box-sizing: border-box !important;
+      /* Reserve the signature and page-number area as table rows change. */
+      padding-bottom: 32mm !important;
+    }
+    .tds-master-print-page .tds-master-page-footer .tds-job-footer {
+      bottom: auto !important;
+      left: auto !important;
+      position: static !important;
+      right: auto !important;
+    }
+    {% endif %}
   }
+
+  /* Typography and spacing are authored in TDS Master.  Do not add a
+     descendant-level override here: TinyMCE stores font, size, line-height,
+     and margins on nested elements in the master content. */
 </style>
 {% endblock %}
 {% block content %}
@@ -988,7 +1441,7 @@
           {% endif %}
           <div class="tds-ads-page-body">
             {% if page.header %}
-            <div class="tds-template-content">{{ page.header|safe }}</div>
+            <div class="tds-template-content tds-ads-page-header">{{ page.header|safe }}</div>
             {% endif %}
             {% if page.source_preview.kind == "pdf" and page.source_preview.url %}
             <object class="tds-source-frame" data="{{ page.source_preview.url }}" type="application/pdf">
@@ -1003,12 +1456,12 @@
               <a href="{{ page.source_preview.url }}" target="_blank" rel="noopener">Open uploaded file</a>
             </div>
             {% else %}
-            <div class="tds-template-content">{{ page.content|strip_hfb|safe }}</div>
+            <div class="tds-template-content tds-ads-page-content">{{ page.content|strip_hfb|safe }}</div>
             {% endif %}
-            {% if page.footer %}
-            <div class="tds-template-content">{{ page.footer|safe }}</div>
-            {% endif %}>
           </div>
+          {% if page.footer %}
+          <div class="tds-template-content tds-ads-page-footer">{{ page.footer|safe }}</div>
+          {% endif %}
         </section>
         {% empty %}
         <div class="alert alert-info mb-0">
@@ -1017,20 +1470,17 @@
         {% endfor %}
       {% else %}
       {% for item in rendered_templates %}
-      <section{% if document_type == 'ads' %} class="tds-ads-body-section"{% endif %}>
+      {% if item.use_source_file %}
+      <section class="tds-master-print-page{% if item.footer_content %} tds-master-has-footer{% endif %}">
         {% if can_edit_tds_template %}
         <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
         {% endif %}
-
-        {% if item.use_source_file %}
+        {% if item.header_content %}
+        <div class="tds-template-content tds-master-page-header">{{ item.header_content|safe }}</div>
+        {% endif %}
+        <div class="tds-master-page-body">
           {% if item.source_preview.kind == "html" and item.source_preview.content %}
-          <div class="tds-template-content">
-            {% if document_type == 'ads' %}
-              {{ item.source_preview.content|strip_hfb|safe }}
-            {% else %}
-              {{ item.source_preview.content|strip_hfb|safe }}
-            {% endif %}
-          </div>
+          <div class="tds-template-content">{{ item.source_preview.content|strip_hfb|safe }}</div>
           {% elif item.source_preview.kind == "pdf" and item.source_preview.url %}
           <object class="tds-source-frame" data="{{ item.source_preview.url }}" type="application/pdf">
             <div class="alert alert-info py-2 mb-0">
@@ -1046,23 +1496,25 @@
           {% else %}
           <div class="alert alert-info py-2 mb-0">Uploaded source file is missing.</div>
           {% endif %}
-        {% elif item.content %}
-        <div class="tds-template-content">
-          {% if document_type == 'ads' %}
-            {{ item.content|strip_hfb|safe }}
-          {% else %}
-            {{ item.content|strip_hfb|safe }}
-          {% endif %}
         </div>
-        {% else %}
-        <div class="alert alert-info py-2 mb-0">
-          Printable content is empty.
-          {% if item.template.source_file %}
-          Source file: <a href="{{ item.template.source_file.url }}" target="_blank" rel="noopener">open uploaded file</a>
-          {% endif %}
-        </div>
+        {% if item.footer_content %}
+        <div class="tds-template-content tds-master-page-footer">{{ item.footer_content|safe }}</div>
         {% endif %}
       </section>
+      {% else %}
+        {% for page in item.pages %}
+        <section class="tds-master-print-page{% if page.footer_content %} tds-master-has-footer{% endif %}">
+          {% if can_edit_tds_template and forloop.first %}
+          <a class="btn btn-sm btn-outline-secondary tds-template-edit-link tds-document-actions" href="{% url 'reports:tds_template_edit' item.template.pk %}">Edit template</a>
+          {% endif %}
+          {% if page.header_content %}<div class="tds-template-content tds-master-page-header">{{ page.header_content|safe }}</div>{% endif %}
+          <div class="tds-master-page-body"><div class="tds-template-content">{{ page.content|strip_hfb|safe }}</div></div>
+          {% if page.footer_content %}<div class="tds-template-content tds-master-page-footer">{{ page.footer_content|safe }}</div>{% endif %}
+        </section>
+        {% empty %}
+        <section class="tds-master-print-page"><div class="alert alert-info py-2 mb-0">Printable content is empty.</div></section>
+        {% endfor %}
+      {% endif %}
       {% endfor %}
 
       {% for item in fallback_ads_templates %}
