@@ -1421,6 +1421,8 @@ class ReportListView(PermissionRequiredMixin, RoleRequiredMixin, ListView):
             "manager",
             "incharge",
             "updated_by",
+        ).filter(
+            status__in=[Report.Status.MANAGER_APPROVED, Report.Status.INCHARGE_APPROVED]
         ).order_by("-created_at")
         search = self.request.GET.get("q", "").strip()
         search_by = self.request.GET.get("search_by", "sample_reg").strip()

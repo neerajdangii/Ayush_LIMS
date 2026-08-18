@@ -496,7 +496,10 @@ def _party_pending_bookings(customer_id="", statuses=None, booking_status="", da
     if "assigned" in statuses:
         status_filter |= Q(status=Booking.Status.APPROVED) & (Q(report__isnull=True) | Q(report__status=Report.Status.DRAFT))
     if "draft" in statuses:
-        status_filter |= Q(report__status=Report.Status.DRAFT)
+        status_filter |= Q(
+            report__status__in=[Report.Status.MANAGER_APPROVED, Report.Status.INCHARGE_APPROVED],
+            report__final_outcome=Report.FinalOutcome.DRAFT,
+        )
     if "pass" in statuses:
         status_filter |= Q(report__final_outcome=Report.FinalOutcome.PASS)
     if statuses:
@@ -509,7 +512,11 @@ def _party_pending_bookings(customer_id="", statuses=None, booking_status="", da
             booking.party_status = "Pending"
         elif report and report.final_outcome == Report.FinalOutcome.PASS:
             booking.party_status = "Pass"
-        elif report and report.status == Report.Status.DRAFT:
+        elif (
+            report
+            and report.status in {Report.Status.MANAGER_APPROVED, Report.Status.INCHARGE_APPROVED}
+            and report.final_outcome == Report.FinalOutcome.DRAFT
+        ):
             booking.party_status = "Draft"
         else:
             booking.party_status = "Assigned"
