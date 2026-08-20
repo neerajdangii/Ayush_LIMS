@@ -1423,7 +1423,7 @@ class ReportListView(PermissionRequiredMixin, RoleRequiredMixin, ListView):
             "updated_by",
         ).filter(
             status__in=[Report.Status.MANAGER_APPROVED, Report.Status.INCHARGE_APPROVED]
-        ).order_by("-created_at")
+        ).order_by("-updated_at", "-pk")
         search = self.request.GET.get("q", "").strip()
         search_by = self.request.GET.get("search_by", "sample_reg").strip()
         status_filter = self.request.GET.get("status", "").strip()
