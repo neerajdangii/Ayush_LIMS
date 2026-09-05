@@ -1040,7 +1040,23 @@ class InlineMasterCreateView(RoleRequiredMixin, View):
             if defaults["test_group"] and defaults["test_group"] not in dict(SampleNameMaster.TestGroup.choices):
                 return JsonResponse({"error": "Invalid Test Group."}, status=400)
 
-        obj, created = conf["model"].objects.get_or_create(name=name, defaults=defaults)
+        related_masters = []
+        with transaction.atomic():
+            obj, created = conf["model"].objects.get_or_create(name=name, defaults=defaults)
+            if slug == "customer":
+                related_master_options = (
+                    ("create_submitter", "submitter", SubmitterMaster),
+                    ("create_manufacturer", "manufacturer", ManufacturerMaster),
+                )
+                for field_name, related_slug, related_model in related_master_options:
+                    if request.POST.get(field_name) == "true":
+                        related_obj, _ = related_model.objects.get_or_create(name=name)
+                        if not related_obj.is_active:
+                            related_obj.is_active = True
+                            related_obj.save(update_fields=["is_active"])
+                        related_masters.append(
+                            {"id": related_obj.pk, "name": related_obj.name, "slug": related_slug}
+                        )
         if slug == "sample-name":
             update_fields = []
             for field in (
@@ -1078,6 +1094,7 @@ class InlineMasterCreateView(RoleRequiredMixin, View):
                 "discipline": getattr(obj, "discipline", ""),
                 "test_group": getattr(obj, "test_group", ""),
                 "sample_type": getattr(obj, "sample_type", ""),
+                "related_masters": related_masters,
                 "created": created,
             }
         )
