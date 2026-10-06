@@ -1303,7 +1303,15 @@ def _position_tds_ads_signature_line(content):
 def _fill_tds_booking_labels(content, booking):
     sample_name = booking.sample_name.name if booking.sample_name_id else ""
     batch_no = booking.batch_no or ""
-    sample_qty = " ".join(part for part in [booking.sample_qty, booking.uom.name if booking.uom_id else ""] if part)
+    sample_qty = " ".join(
+        part
+        for part in [
+            booking.sample_qty,
+            booking.uom.name if booking.uom_id else "",
+        ]
+        if part
+    )
+
     replacements = (
         ("Sample Name", sample_name),
         ("Sample Number", batch_no),
@@ -1323,21 +1331,25 @@ def _fill_tds_booking_labels(content, booking):
     for label, value in replacements:
         if not value:
             continue
+
         content = re.sub(
             rf"({label}\s*:\s*)(?=(?:&nbsp;|\s|</(?:td|th|p|div|span|strong|b)>|<br\s*/?>))",
-            rf"\g<1>{escape(value)}",
+            lambda match: f"{match.group(1)}{escape(value)}",
             content,
             count=1,
             flags=re.IGNORECASE,
         )
+
         label_pattern = re.escape(label).replace(r"\ ", r"\s+")
+
         content = re.sub(
             rf"(<t[dh]\b[^>]*>\s*(?:<[^>]+>\s*)*{label_pattern}\s*:?\s*(?:</[^>]+>\s*)*</t[dh]>\s*<t[dh]\b[^>]*>)(?:\s|&nbsp;|<br\s*/?>|<p\b[^>]*>(?:\s|&nbsp;|<br\s*/?>)*</p>)*(</t[dh]>)",
-            rf"\g<1>{escape(value)}\g<2>",
+            lambda match: f"{match.group(1)}{escape(value)}{match.group(2)}",
             content,
             count=1,
             flags=re.IGNORECASE,
         )
+
     return content
 
 
